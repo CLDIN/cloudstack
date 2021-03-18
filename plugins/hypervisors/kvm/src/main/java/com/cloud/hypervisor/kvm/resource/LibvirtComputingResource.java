@@ -4296,8 +4296,8 @@ public class LibvirtComputingResource extends ServerResourceBase implements Serv
                 String backingFileFmt = backingFileinfo.get(QemuImg.FILE_FORMAT);
                 qemu.rebase(file, backingFile, backingFileFmt, false);
             }
-        } catch (QemuImgException e) {
-            s_logger.error("Failed to set backing file format of " + volPath + " due to : " + e.getMessage());
+        } catch (QemuImgException | LibvirtException e) {
+            s_logger.error("Failed to set backing file format of " + volPath + " due to : " + e.getMessage(), e);
         }
     }
 
