@@ -82,6 +82,9 @@ public class ListIsosCmd extends BaseListTaggedResourcesCmd implements UserCmd {
     @Parameter(name = ApiConstants.SHOW_UNIQUE, type = CommandType.BOOLEAN, description = "If set to true, list only unique isos across zones", since = "4.13.2")
     private Boolean showUnique;
 
+    @Parameter(name = ApiConstants.SHOW_PUBLIC, type = CommandType.BOOLEAN, description = "If set to true, list only public templates across zones", since = "4.16.0")
+    private Boolean showPublic;
+
     /////////////////////////////////////////////////////
     /////////////////// Accessors ///////////////////////
     /////////////////////////////////////////////////////
@@ -124,6 +127,10 @@ public class ListIsosCmd extends BaseListTaggedResourcesCmd implements UserCmd {
 
     public Boolean getShowUnique() {
         return showUnique != null && showUnique;
+    }
+
+    public boolean getShowPublic() {
+        return showPublic != null && showPublic;
     }
 
     public boolean listInReadyState() {
