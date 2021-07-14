@@ -568,6 +568,44 @@ public class LibvirtMigrateCommandWrapperTest {
             "  </devices>\n" +
             "</domain>\n";
 
+    private final static String XML_WITHOUT_IO_DRIVER =
+            "<disk type='file' device='disk'>\n" +
+                    "  <driver name='qemu' type='qcow2' cache='none'/>\n" +
+                    "  <source file='/mnt/fc719e74-c3d9-315e-91cf-df5120e5c8f3/ca969f6c-c152-408a-b260-269c25723e1b' index='2'/>\n" +
+                    "  <backingStore/>\n" +
+                    "  <target dev='vda' bus='virtio'/>\n" +
+                    "  <serial>b5411e463ed1479b8f82</serial>\n" +
+                    "  <alias name='virtio-disk0'/>\n" +
+                    "  <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>\n" +
+                    "</disk>\n" +
+                    "<disk type='file' device='cdrom'>\n" +
+                    "  <driver name='qemu'/>\n" +
+                    "  <target dev='hdc' bus='ide'/>\n" +
+                    "  <readonly/>\n" +
+                    "  <alias name='ide0-1-0'/>\n" +
+                    "  <address type='drive' controller='0' bus='1' target='0' unit='0'/>\n" +
+                    "</disk>";
+    private final static String XML_WITH_IO_DRIVER =
+            "<disk type='file' device='disk'>\n" +
+                    "  <driver name='qemu' type='qcow2' cache='none' io='io_uring'/>\n" +
+                    "  <source file='/mnt/fc719e74-c3d9-315e-91cf-df5120e5c8f3/ca969f6c-c152-408a-b260-269c25723e1b' index='2'/>\n" +
+                    "  <backingStore/>\n" +
+                    "  <target dev='vda' bus='virtio'/>\n" +
+                    "  <serial>b5411e463ed1479b8f82</serial>\n" +
+                    "  <alias name='virtio-disk0'/>\n" +
+                    "  <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>\n" +
+                    "</disk>\n" +
+                    "<disk type='file' device='cdrom'>\n" +
+                    "  <driver name='qemu'/>\n" +
+                    "  <target dev='hdc' bus='ide'/>\n" +
+                    "  <readonly/>\n" +
+                    "  <alias name='ide0-1-0'/>\n" +
+                    "  <address type='drive' controller='0' bus='1' target='0' unit='0'/>\n" +
+                    "</disk>";
+
+    private final static long HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING = 6003000;
+    private final static long HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING = 5000000;
+
     @Test
     public void testReplaceIpForVNCInDescFile() {
         final String targetIp = "192.168.22.21";
@@ -789,5 +827,47 @@ public class LibvirtMigrateCommandWrapperTest {
         Assert.assertTrue(replaced.contains("csdpdk-7"));
         Assert.assertFalse(replaced.contains("csdpdk-1"));
     }
+
+
+//  TODO
+//    protected String replaceIoDriver(String xmlDesc, List<DiskDef> disks, LibvirtComputingResource libvirtComputingResource) {
+//        boolean isIoDriverSetInXml = xmlDesc.contains(IO_DRIVER_XML_PARAM);
+//        if (libvirtComputingResource.isIoUringSupported() && !isIoDriverSetInXml) {
+//            return addIoDriverInXml(xmlDesc);
+//        }
+//        if (!libvirtComputingResource.isIoUringSupported() && isIoDriverSetInXml) {
+//            return removeIoDriverInXml(xmlDesc);
+//        }
+//        return xmlDesc;
+//    }
+//    @Test
+    public void testReplaceIoDriver() {
+        String lala = XML_WITHOUT_IO_DRIVER +
+                XML_WITH_IO_DRIVER;
+        List<DiskDef> disks = new ArrayList<>();
+        LibvirtComputingResource libvirtComputingResource = Mockito.spy(new LibvirtComputingResource());
+        Mockito.doReturn(HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING).when(libvirtComputingResource).getHypervisorLibvirtVersion();
+        Mockito.doReturn(HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING).when(libvirtComputingResource).getHypervisorQemuVersion();
+
+        libvirtMigrateCmdWrapper.replaceIoDriver(XML_WITH_IO_DRIVER, disks, libvirtComputingResource);
+    }
+
+    @Test
+    public void removeIoDriverInXmlTest() {
+        String result = libvirtMigrateCmdWrapper.removeIoDriverInXml(XML_WITH_IO_DRIVER);
+        Assert.assertEquals(XML_WITHOUT_IO_DRIVER, result);
+    }
+
+    @Test
+    public void removeIoDriverInXmlTestNoIoDriver() {
+        String result = libvirtMigrateCmdWrapper.removeIoDriverInXml(XML_WITHOUT_IO_DRIVER);
+        Assert.assertEquals(XML_WITHOUT_IO_DRIVER, result);
+    }
+
+//    @Test
+//    public void addIoDriverInXmlTest() {
+//        String result = libvirtMigrateCmdWrapper.addIoDriverInXml(XML_WITH_IO_DRIVER);
+//        Assert.assertEquals(XML_WITHOUT_IO_DRIVER, result);
+//    }
 
 }

@@ -344,11 +344,11 @@ public class LibvirtComputingResource extends ServerResourceBase implements Serv
     protected MemStat _memStat = new MemStat(_dom0MinMem, _dom0OvercommitMem);
     private final LibvirtUtilitiesHelper libvirtUtilitiesHelper = new LibvirtUtilitiesHelper();
 
-    protected long getHypervisorLibvirtVersion() {
+    public long getHypervisorLibvirtVersion() {
         return _hypervisorLibvirtVersion;
     }
 
-    protected long getHypervisorQemuVersion() {
+    public long getHypervisorQemuVersion() {
         return _hypervisorQemuVersion;
     }
 
@@ -2738,9 +2738,16 @@ public class LibvirtComputingResource extends ServerResourceBase implements Serv
      * (ii) Libvirt >= 6.3.0
      */
     protected void setDiskIoDriver(DiskDef disk) {
-        if (getHypervisorLibvirtVersion() >= HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING && getHypervisorQemuVersion() >= HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING) {
+        if (isIoUringSupported()) {
             disk.setIoDriver(DiskDef.IoDriver.IOURING);
         }
+    }
+
+    public boolean isIoUringSupported() {
+        if (getHypervisorLibvirtVersion() >= HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING && getHypervisorQemuVersion() >= HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING) {
+            return true;
+        }
+        return false;
     }
 
     private KVMPhysicalDisk getPhysicalDiskFromNfsStore(String dataStoreUrl, DataTO data) {

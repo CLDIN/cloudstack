@@ -23,6 +23,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URISyntaxException;
+import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -84,6 +85,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
     private static final String GRAPHICS_ELEM_END = "/graphics>";
     private static final String GRAPHICS_ELEM_START = "<graphics";
     private static final String CONTENTS_WILDCARD = "(?s).*";
+    private static final String IO_DRIVER_XML_PARAM = "io=";
     private static final Logger s_logger = Logger.getLogger(LibvirtMigrateCommandWrapper.class);
 
     protected String createMigrationURI(final String destinationIp, final LibvirtComputingResource libvirtComputingResource) {
@@ -162,6 +164,8 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
                     libvirtComputingResource.setBackingFileFormat(disk.getDiskPath());
                 }
             }
+
+            xmlDesc = replaceIoDriver(xmlDesc, disks, libvirtComputingResource);
 
             Map<String, MigrateCommand.MigrateDiskInfo> mapMigrateStorage = command.getMigrateStorage();
             // migrateStorage is declared as final because the replaceStorage method may mutate mapMigrateStorage, but
@@ -628,6 +632,52 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             }
         }
         return getXml(doc);
+    }
+
+    /**
+     * TODO
+     */
+    protected String replaceIoDriver(String xmlDesc, List<DiskDef> disks, LibvirtComputingResource libvirtComputingResource) {
+        boolean isIoDriverSetInXml = xmlDesc.contains(IO_DRIVER_XML_PARAM);
+        boolean isIoUringSupported = libvirtComputingResource.isIoUringSupported();
+        if (!isIoDriverSetInXml && isIoUringSupported) {
+            return addIoDriverInXml(xmlDesc);
+        }
+        if (isIoDriverSetInXml && !isIoUringSupported) {
+            return removeIoDriverInXml(xmlDesc);
+        }
+        return xmlDesc;
+    }
+
+    /**
+     * TODO
+     */
+    protected String addIoDriverInXml(String xmlDesc) {
+        InputStream in = IOUtils.toInputStream(xmlDesc, Charset.defaultCharset());
+
+        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
+        Document doc = null;
+        try {
+            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
+            doc = docBuilder.parse(in);
+        } catch (SAXException | IOException | ParserConfigurationException e) {
+            e.printStackTrace(); //TODO
+        }
+
+        // Get the root element
+        Node domainNode = doc.getFirstChild();
+        NodeList domainChildNodes = domainNode.getChildNodes();
+
+        //TODO for now, do nothing
+        return xmlDesc;
+    }
+
+    /**
+     * TODO
+     */
+    protected String removeIoDriverInXml(String xmlDesc) {
+        String stringToRemove = String.format(" %s'%s'", IO_DRIVER_XML_PARAM, DiskDef.IoDriver.IOURING);
+        return xmlDesc.replace(stringToRemove,"");
     }
 
     private boolean findDiskNode(Document doc, NodeList devicesChildNodes, String vmName, String isoPath) {
