@@ -43,6 +43,10 @@ import javax.xml.transform.TransformerException;
 import javax.xml.transform.TransformerFactory;
 import javax.xml.transform.dom.DOMSource;
 import javax.xml.transform.stream.StreamResult;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathExpressionException;
+import javax.xml.xpath.XPathFactory;
 
 import com.cloud.agent.api.to.DiskTO;
 import com.cloud.agent.api.to.DpdkTO;
@@ -84,8 +88,11 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
 
     private static final String GRAPHICS_ELEM_END = "/graphics>";
     private static final String GRAPHICS_ELEM_START = "<graphics";
+    private static final String DEVICES = "devices";
+    private static final String SOURCE = "source";
     private static final String CONTENTS_WILDCARD = "(?s).*";
     private static final String IO_DRIVER_XML_PARAM = "io=";
+    private static final String DRIVER = "driver";
     private static final Logger s_logger = Logger.getLogger(LibvirtMigrateCommandWrapper.class);
 
     protected String createMigrationURI(final String destinationIp, final LibvirtComputingResource libvirtComputingResource) {
@@ -165,8 +172,6 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
                 }
             }
 
-            xmlDesc = replaceIoDriver(xmlDesc, disks, libvirtComputingResource);
-
             Map<String, MigrateCommand.MigrateDiskInfo> mapMigrateStorage = command.getMigrateStorage();
             // migrateStorage is declared as final because the replaceStorage method may mutate mapMigrateStorage, but
             // migrateStorage's value should always only be associated with the initial state of mapMigrateStorage.
@@ -183,6 +188,14 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             }
 
             dconn = libvirtUtilitiesHelper.retrieveQemuConnection(destinationUri);
+
+            try {
+                xmlDesc = replaceIoDriver(xmlDesc, conn, dconn, libvirtComputingResource);
+            } catch (LibvirtException e) {
+                s_logger.warn("Skipping IO Driver XML replacement. Failed to connect with Libvirt while retrieving Libvirt & Qemu versions.", e);
+            } catch (XPathExpressionException e) {
+                s_logger.warn("Skipping IO Driver XML replacement. Failed to process domain's XML.", e);
+            }
 
             //run migration in thread so we can monitor it
             s_logger.info("Live migration of instance " + vmName + " initiated to destination host: " + dconn.getURI());
@@ -318,7 +331,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         for (int i = 0; i < domainChildNodes.getLength(); i++) {
             Node domainChildNode = domainChildNodes.item(i);
 
-            if ("devices".equals(domainChildNode.getNodeName())) {
+            if (DEVICES.equals(domainChildNode.getNodeName())) {
                 NodeList devicesChildNodes = domainChildNode.getChildNodes();
 
                 for (int x = 0; x < devicesChildNodes.getLength(); x++) {
@@ -351,7 +364,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
                                         Node targetNode = diskChildNode;
                                         Node targetNodeAttr = targetNode.getAttributes().getNamedItem("dev");
                                         targetNodeAttr.setNodeValue(to.getPort());
-                                    } else if ("source".equals(diskChildNode.getNodeName())) {
+                                    } else if (SOURCE.equals(diskChildNode.getNodeName())) {
                                         Node sourceNode = diskChildNode;
                                         NamedNodeMap attrs = sourceNode.getAttributes();
                                         Node path = attrs.getNamedItem("path");
@@ -371,7 +384,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
     }
 
     /**
-     * In case of a local file, it deletes the file on the source host/storage pool. Otherwise (for instance iScsi) it disconnects the disk on the source storage pool. </br>
+     * In case of a local file, it deletes the file on the source host/storage pool. Otherwise (for instance iScsi) it disconnects the disk on the source storage pool. <br>
      * This method must be executed after a successful migration to a target storage pool, cleaning up the source storage.
      */
     protected void deleteOrDisconnectDisksOnSourcePool(final LibvirtComputingResource libvirtComputingResource, final List<MigrateDiskInfo> migrateDiskInfoList,
@@ -462,13 +475,13 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         for (int i = 0; i < domainChildNodes.getLength(); i++) {
             Node domainChildNode = domainChildNodes.item(i);
 
-            if ("devices".equals(domainChildNode.getNodeName())) {
+            if (DEVICES.equals(domainChildNode.getNodeName())) {
                 NodeList devicesChildNodes = domainChildNode.getChildNodes();
 
                 for (int x = 0; x < devicesChildNodes.getLength(); x++) {
                     Node deviceChildNode = devicesChildNodes.item(x);
 
-                    if ("disk".equals(deviceChildNode.getNodeName())) {
+                    if (DiskDef.DeviceType.DISK.toString().equals(deviceChildNode.getNodeName())) {
                         Node diskNode = deviceChildNode;
 
                         String sourceText = getSourceText(diskNode);
@@ -495,10 +508,10 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
                                     Node driverNodeAttribute = driverNodeAttributes.getNamedItem("type");
 
                                     driverNodeAttribute.setTextContent(migrateDiskInfo.getDriverType().toString());
-                                } else if ("source".equals(diskChildNode.getNodeName())) {
+                                } else if (SOURCE.equals(diskChildNode.getNodeName())) {
                                     diskNode.removeChild(diskChildNode);
 
-                                    Element newChildSourceNode = doc.createElement("source");
+                                    Element newChildSourceNode = doc.createElement(SOURCE);
 
                                     newChildSourceNode.setAttribute(migrateDiskInfo.getSource().toString(), migrateDiskInfo.getSourceText());
 
@@ -561,7 +574,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         for (int i = 0; i < diskChildNodes.getLength(); i++) {
             Node diskChildNode = diskChildNodes.item(i);
 
-            if ("source".equals(diskChildNode.getNodeName())) {
+            if (SOURCE.equals(diskChildNode.getNodeName())) {
                 NamedNodeMap diskNodeAttributes = diskChildNode.getAttributes();
 
                 Node diskNodeAttribute = diskNodeAttributes.getNamedItem("file");
@@ -624,7 +637,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         for (int i = 0; i < domainChildNodes.getLength(); i++) {
             Node domainChildNode = domainChildNodes.item(i);
 
-            if ("devices".equals(domainChildNode.getNodeName())) {
+            if (DEVICES.equals(domainChildNode.getNodeName())) {
                 NodeList devicesChildNodes = domainChildNode.getChildNodes();
                 if (findDiskNode(doc, devicesChildNodes, vmName, isoPath)) {
                     break;
@@ -635,11 +648,14 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
     }
 
     /**
-     * TODO
+     * If necessary, it adds or removes the IO Driver from the VM's domain. <br>
+     * IO driver should be added when migrating from a host that does not support IO Driver to one that does support. <br>
+     * On the other hand, if the last host supports IO Driver but the target host does not then it removes the driver and keeps the KVM default driver.
      */
-    protected String replaceIoDriver(String xmlDesc, List<DiskDef> disks, LibvirtComputingResource libvirtComputingResource) {
+    protected String replaceIoDriver(String xmlDesc, Connect conn, Connect dconn, LibvirtComputingResource libvirtComputingResource)
+            throws LibvirtException, IOException, ParserConfigurationException, SAXException, XPathExpressionException, TransformerException {
         boolean isIoDriverSetInXml = xmlDesc.contains(IO_DRIVER_XML_PARAM);
-        boolean isIoUringSupported = libvirtComputingResource.isIoUringSupported();
+        boolean isIoUringSupported = libvirtComputingResource.isIoUringSupported(dconn.getLibVersion(), dconn.getVersion());
         if (!isIoDriverSetInXml && isIoUringSupported) {
             return addIoDriverInXml(xmlDesc);
         }
@@ -650,30 +666,45 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
     }
 
     /**
-     * TODO
+     * Adds IO Driver into the 'disk' element of the domain's XML if disk type is of 'file'. <br>
+     * Example:
+     * <pre>{@code
+     *  <devices>
+     *      <disk device="disk" type="file">
+     *          <driver cache="none" io="io_uring" name="qemu" type="qcow2"/>.
+     *          ...
+     *      </disk>
+     *    ...
+     *  <devices>
+     * }</pre>
      */
-    protected String addIoDriverInXml(String xmlDesc) {
-        InputStream in = IOUtils.toInputStream(xmlDesc, Charset.defaultCharset());
+    protected String addIoDriverInXml(String xmlDesc) throws ParserConfigurationException, IOException, SAXException, XPathExpressionException, TransformerException {
+        InputStream inputStream = IOUtils.toInputStream(xmlDesc, Charset.defaultCharset());
+        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+        DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+        Document xmlDoc = documentBuilder.parse(inputStream);
+        XPath xpath = XPathFactory.newInstance().newXPath();
+        String diskTypeFileExpression = "//disk[@type='file' and @device='disk']";
+        NodeList diskNodeList = (NodeList) xpath.compile(diskTypeFileExpression).evaluate(xmlDoc, XPathConstants.NODESET);
 
-        DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-        Document doc = null;
-        try {
-            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
-            doc = docBuilder.parse(in);
-        } catch (SAXException | IOException | ParserConfigurationException e) {
-            e.printStackTrace(); //TODO
+        for (int devicesElementIndex = 0; devicesElementIndex < diskNodeList.getLength(); devicesElementIndex++) {
+            Node diskNode = diskNodeList.item(devicesElementIndex);
+            NodeList diskElemets = diskNode.getChildNodes();
+            for (int diskElementIndex = 0; diskElementIndex < diskElemets.getLength(); diskElementIndex++) {
+                Node driverNode = diskElemets.item(diskElementIndex);
+                if (DRIVER.equals(driverNode.getNodeName())) {
+                    ((Element)driverNode).setAttribute("io", DiskDef.IoDriver.IOURING.toString());
+                    break;
+                }
+            }
         }
 
-        // Get the root element
-        Node domainNode = doc.getFirstChild();
-        NodeList domainChildNodes = domainNode.getChildNodes();
-
-        //TODO for now, do nothing
-        return xmlDesc;
+        return getXml(xmlDoc);
     }
 
     /**
-     * TODO
+     * Removes any occurrence of the IO Driver 'io=io_uring' in the given XML. <br>
+     * This is necessary to avoid failing to migrate VM in case the io_uring is not supported in the target KVM host.
      */
     protected String removeIoDriverInXml(String xmlDesc) {
         String stringToRemove = String.format(" %s'%s'", IO_DRIVER_XML_PARAM, DiskDef.IoDriver.IOURING);
@@ -683,7 +714,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
     private boolean findDiskNode(Document doc, NodeList devicesChildNodes, String vmName, String isoPath) {
         for (int x = 0; x < devicesChildNodes.getLength(); x++) {
             Node deviceChildNode = devicesChildNodes.item(x);
-            if ("disk".equals(deviceChildNode.getNodeName())) {
+            if (DiskDef.DeviceType.DISK.toString().equals(deviceChildNode.getNodeName())) {
                 Node diskNode = deviceChildNode;
                 if (findSourceNode(doc, diskNode, vmName, isoPath)) {
                     return true;
@@ -697,13 +728,13 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         NodeList diskChildNodes = diskNode.getChildNodes();
         for (int z = 0; z < diskChildNodes.getLength(); z++) {
             Node diskChildNode = diskChildNodes.item(z);
-            if ("source".equals(diskChildNode.getNodeName())) {
+            if (SOURCE.equals(diskChildNode.getNodeName())) {
                 Node sourceNode = diskChildNode;
                 NamedNodeMap sourceNodeAttributes = sourceNode.getAttributes();
                 Node sourceNodeAttribute = sourceNodeAttributes.getNamedItem("file");
                 if ( sourceNodeAttribute.getNodeValue().contains(vmName)) {
                     diskNode.removeChild(diskChildNode);
-                    Element newChildSourceNode = doc.createElement("source");
+                    Element newChildSourceNode = doc.createElement(SOURCE);
                     newChildSourceNode.setAttribute("file", isoPath);
                     diskNode.appendChild(newChildSourceNode);
                     return true;

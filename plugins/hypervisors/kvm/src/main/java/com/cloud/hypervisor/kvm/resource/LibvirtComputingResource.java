@@ -2738,13 +2738,13 @@ public class LibvirtComputingResource extends ServerResourceBase implements Serv
      * (ii) Libvirt >= 6.3.0
      */
     protected void setDiskIoDriver(DiskDef disk) {
-        if (isIoUringSupported()) {
+        if (isIoUringSupported(getHypervisorLibvirtVersion(), getHypervisorQemuVersion())) {
             disk.setIoDriver(DiskDef.IoDriver.IOURING);
         }
     }
 
-    public boolean isIoUringSupported() {
-        if (getHypervisorLibvirtVersion() >= HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING && getHypervisorQemuVersion() >= HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING) {
+    public boolean isIoUringSupported(long libvirtVersion, long qemuVersion) {
+        if (libvirtVersion >= HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING && qemuVersion >= HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING) {
             return true;
         }
         return false;

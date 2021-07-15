@@ -44,6 +44,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.libvirt.Connect;
+import org.libvirt.LibvirtException;
 import org.libvirt.StorageVol;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -569,42 +570,76 @@ public class LibvirtMigrateCommandWrapperTest {
             "</domain>\n";
 
     private final static String XML_WITHOUT_IO_DRIVER =
-            "<disk type='file' device='disk'>\n" +
-                    "  <driver name='qemu' type='qcow2' cache='none'/>\n" +
-                    "  <source file='/mnt/fc719e74-c3d9-315e-91cf-df5120e5c8f3/ca969f6c-c152-408a-b260-269c25723e1b' index='2'/>\n" +
-                    "  <backingStore/>\n" +
-                    "  <target dev='vda' bus='virtio'/>\n" +
-                    "  <serial>b5411e463ed1479b8f82</serial>\n" +
-                    "  <alias name='virtio-disk0'/>\n" +
-                    "  <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>\n" +
-                    "</disk>\n" +
-                    "<disk type='file' device='cdrom'>\n" +
-                    "  <driver name='qemu'/>\n" +
-                    "  <target dev='hdc' bus='ide'/>\n" +
-                    "  <readonly/>\n" +
-                    "  <alias name='ide0-1-0'/>\n" +
-                    "  <address type='drive' controller='0' bus='1' target='0' unit='0'/>\n" +
-                    "</disk>";
-    private final static String XML_WITH_IO_DRIVER =
-            "<disk type='file' device='disk'>\n" +
-                    "  <driver name='qemu' type='qcow2' cache='none' io='io_uring'/>\n" +
-                    "  <source file='/mnt/fc719e74-c3d9-315e-91cf-df5120e5c8f3/ca969f6c-c152-408a-b260-269c25723e1b' index='2'/>\n" +
-                    "  <backingStore/>\n" +
-                    "  <target dev='vda' bus='virtio'/>\n" +
-                    "  <serial>b5411e463ed1479b8f82</serial>\n" +
-                    "  <alias name='virtio-disk0'/>\n" +
-                    "  <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>\n" +
-                    "</disk>\n" +
-                    "<disk type='file' device='cdrom'>\n" +
-                    "  <driver name='qemu'/>\n" +
-                    "  <target dev='hdc' bus='ide'/>\n" +
-                    "  <readonly/>\n" +
-                    "  <alias name='ide0-1-0'/>\n" +
-                    "  <address type='drive' controller='0' bus='1' target='0' unit='0'/>\n" +
-                    "</disk>";
+            "<devices>\n" +
+                    "  <emulator>/usr/libexec/qemu-kvm</emulator>\n" +
+                    "  <disk device='disk' type='file'>\n" +
+                    "    <driver cache='none' name='qemu' type='qcow2'/>\n" +
+                    "    <source file='/mnt/812ea6a3-7ad0-30f4-9cab-01e3f2985b98/4650a2f7-fce5-48e2-beaa-bcdf063194e6'/>\n" +
+                    "    <backingStore index='1' type='file'>\n" +
+                    "      <format type='raw'/>\n" +
+                    "      <source file='/mnt/812ea6a3-7ad0-30f4-9cab-01e3f2985b98/bb4d4df4-c004-11e5-94ed-5254001daa61'/>\n" +
+                    "      <backingStore/>\n" +
+                    "    </backingStore>\n" +
+                    "    <target bus='virtio' dev='vda'/>\n" +
+                    "    <iotune>\n" +
+                    "      <write_iops_sec>500</write_iops_sec>\n" +
+                    "      <write_iops_sec_max>5000</write_iops_sec_max>\n" +
+                    "      <write_iops_sec_max_length>60</write_iops_sec_max_length>\n" +
+                    "    </iotune>\n" +
+                    "    <serial>4650a2f7fce548e2beaa</serial>\n" +
+                    "    <alias name='virtio-disk0'/>\n" +
+                    "    <address bus='0x00' domain='0x0000' function='0x0' slot='0x04' type='pci'/>\n" +
+                    "  </disk>\n" +
+                    "  <disk device='cdrom' type='file'>\n" +
+                    "    <driver cache='none' name='qemu' type='raw'/>\n" +
+                    "    <backingStore/>\n" +
+                    "    <target bus='ide' dev='hdc'/>\n" +
+                    "    <readonly/>\n" +
+                    "    <alias name='ide0-1-0'/>\n" +
+                    "    <address bus='1' controller='0' target='0' type='drive' unit='0'/>\n" +
+                    "  </disk>\n" +
+                    "  <controller index='0' type='usb'>\n" +
+                    "    <alias name='usb'/>\n" +
+                    "    <address bus='0x00' domain='0x0000' function='0x2' slot='0x01' type='pci'/>\n" +
+                    "  </controller>\n" +
+                    "</devices>\n";
 
-    private final static long HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING = 6003000;
-    private final static long HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING = 5000000;
+    private final static String XML_WITH_IO_DRIVER =
+            "<devices>\n" +
+                    "  <emulator>/usr/libexec/qemu-kvm</emulator>\n" +
+                    "  <disk device='disk' type='file'>\n" +
+                    "    <driver cache='none' name='qemu' type='qcow2' io='io_uring'/>\n" +
+                    "    <source file='/mnt/812ea6a3-7ad0-30f4-9cab-01e3f2985b98/4650a2f7-fce5-48e2-beaa-bcdf063194e6'/>\n" +
+                    "    <backingStore index='1' type='file'>\n" +
+                    "      <format type='raw'/>\n" +
+                    "      <source file='/mnt/812ea6a3-7ad0-30f4-9cab-01e3f2985b98/bb4d4df4-c004-11e5-94ed-5254001daa61'/>\n" +
+                    "      <backingStore/>\n" +
+                    "    </backingStore>\n" +
+                    "    <target bus='virtio' dev='vda'/>\n" +
+                    "    <iotune>\n" +
+                    "      <write_iops_sec>500</write_iops_sec>\n" +
+                    "      <write_iops_sec_max>5000</write_iops_sec_max>\n" +
+                    "      <write_iops_sec_max_length>60</write_iops_sec_max_length>\n" +
+                    "    </iotune>\n" +
+                    "    <serial>4650a2f7fce548e2beaa</serial>\n" +
+                    "    <alias name='virtio-disk0'/>\n" +
+                    "    <address bus='0x00' domain='0x0000' function='0x0' slot='0x04' type='pci'/>\n" +
+                    "  </disk>\n" +
+                    "  <disk device='cdrom' type='file'>\n" +
+                    "    <driver cache='none' name='qemu' type='raw'/>\n" +
+                    "    <backingStore/>\n" +
+                    "    <target bus='ide' dev='hdc'/>\n" +
+                    "    <readonly/>\n" +
+                    "    <alias name='ide0-1-0'/>\n" +
+                    "    <address bus='1' controller='0' target='0' type='drive' unit='0'/>\n" +
+                    "  </disk>\n" +
+                    "  <controller index='0' type='usb'>\n" +
+                    "    <alias name='usb'/>\n" +
+                    "    <address bus='0x00' domain='0x0000' function='0x2' slot='0x01' type='pci'/>\n" +
+                    "  </controller>\n" +
+                    "</devices>\n";
+
+    private static final String IO_DRIVER_XML_PARAM = "io=";
 
     @Test
     public void testReplaceIpForVNCInDescFile() {
@@ -828,28 +863,38 @@ public class LibvirtMigrateCommandWrapperTest {
         Assert.assertFalse(replaced.contains("csdpdk-1"));
     }
 
+    @Test
+    public void testReplaceIoDriverWithoutIoButSupported() throws LibvirtException, IOException, ParserConfigurationException, SAXException, XPathExpressionException, TransformerException {
+        prepareAndTestReplaceIoDriver(XML_WITHOUT_IO_DRIVER, true, 1, 0);
+    }
 
-//  TODO
-//    protected String replaceIoDriver(String xmlDesc, List<DiskDef> disks, LibvirtComputingResource libvirtComputingResource) {
-//        boolean isIoDriverSetInXml = xmlDesc.contains(IO_DRIVER_XML_PARAM);
-//        if (libvirtComputingResource.isIoUringSupported() && !isIoDriverSetInXml) {
-//            return addIoDriverInXml(xmlDesc);
-//        }
-//        if (!libvirtComputingResource.isIoUringSupported() && isIoDriverSetInXml) {
-//            return removeIoDriverInXml(xmlDesc);
-//        }
-//        return xmlDesc;
-//    }
-//    @Test
-    public void testReplaceIoDriver() {
-        String lala = XML_WITHOUT_IO_DRIVER +
-                XML_WITH_IO_DRIVER;
-        List<DiskDef> disks = new ArrayList<>();
+    @Test
+    public void testReplaceIoDriverWithoutIoAndNotSupported() throws LibvirtException, IOException, ParserConfigurationException, SAXException, XPathExpressionException, TransformerException {
+        prepareAndTestReplaceIoDriver(XML_WITHOUT_IO_DRIVER, false, 0, 0);
+    }
+
+    @Test
+    public void testReplaceIoDriverWithIoNotSupported() throws LibvirtException, IOException, ParserConfigurationException, SAXException, XPathExpressionException, TransformerException {
+        prepareAndTestReplaceIoDriver(XML_WITH_IO_DRIVER, false, 0, 1);
+    }
+
+    @Test
+    public void testReplaceIoDriverWithIoAndSupported() throws LibvirtException, IOException, ParserConfigurationException, SAXException, XPathExpressionException, TransformerException {
+        prepareAndTestReplaceIoDriver(XML_WITH_IO_DRIVER, true, 0, 0);
+    }
+
+    private void prepareAndTestReplaceIoDriver(String xml, boolean isIoUringSupported, int addIoDriverInXmlTimes, int removeIoDriverInXmlTimes)
+            throws LibvirtException, ParserConfigurationException, IOException, SAXException, XPathExpressionException, TransformerException {
         LibvirtComputingResource libvirtComputingResource = Mockito.spy(new LibvirtComputingResource());
-        Mockito.doReturn(HYPERVISOR_LIBVIRT_VERSION_SUPPORTS_IO_URING).when(libvirtComputingResource).getHypervisorLibvirtVersion();
-        Mockito.doReturn(HYPERVISOR_QEMU_VERSION_SUPPORTS_IO_URING).when(libvirtComputingResource).getHypervisorQemuVersion();
+        Mockito.doReturn(isIoUringSupported).when(libvirtComputingResource).isIoUringSupported(Mockito.anyLong(), Mockito.anyLong());
+        Connect conn = Mockito.mock(Connect.class);
+        Mockito.when(conn.getLibVirVersion()).thenReturn(0l);
+        LibvirtMigrateCommandWrapper libvirtMigrateCmdWrapperSpy = Mockito.spy(new LibvirtMigrateCommandWrapper());
 
-        libvirtMigrateCmdWrapper.replaceIoDriver(XML_WITH_IO_DRIVER, disks, libvirtComputingResource);
+        libvirtMigrateCmdWrapperSpy.replaceIoDriver(xml, conn, conn, libvirtComputingResource);
+
+        Mockito.verify(libvirtMigrateCmdWrapperSpy, Mockito.times(addIoDriverInXmlTimes)).addIoDriverInXml(Mockito.anyString());
+        Mockito.verify(libvirtMigrateCmdWrapperSpy, Mockito.times(removeIoDriverInXmlTimes)).removeIoDriverInXml(Mockito.anyString());
     }
 
     @Test
@@ -864,10 +909,16 @@ public class LibvirtMigrateCommandWrapperTest {
         Assert.assertEquals(XML_WITHOUT_IO_DRIVER, result);
     }
 
-//    @Test
-//    public void addIoDriverInXmlTest() {
-//        String result = libvirtMigrateCmdWrapper.addIoDriverInXml(XML_WITH_IO_DRIVER);
-//        Assert.assertEquals(XML_WITHOUT_IO_DRIVER, result);
-//    }
+    @Test
+    public void addIoDriverInXmlTestWithIo() throws ParserConfigurationException, IOException, SAXException, XPathExpressionException, TransformerException {
+        String result = libvirtMigrateCmdWrapper.addIoDriverInXml(XML_WITH_IO_DRIVER);
+        Assert.assertTrue(result.contains(IO_DRIVER_XML_PARAM));
+    }
+
+    @Test
+    public void addIoDriverInXmlTestNoIo() throws ParserConfigurationException, IOException, SAXException, XPathExpressionException, TransformerException {
+        String result = libvirtMigrateCmdWrapper.addIoDriverInXml(XML_WITHOUT_IO_DRIVER);
+        Assert.assertTrue(result.contains(IO_DRIVER_XML_PARAM));
+    }
 
 }
