@@ -142,7 +142,7 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
 
                                Use VIR_DOMAIN_XML_SECURE (value = 1) prior to v1.0.0.
              */
-            final int xmlFlag = conn.getLibVirVersion() >= 1000000 ? 8 : 1; // 1000000 equals v1.0.0
+            final int xmlFlag = conn.getLibVersion() >= 1000000 ? 8 : 1; // 1000000 equals v1.0.0
 
             final String target = command.getDestinationIp();
             xmlDesc = dm.getXMLDesc(xmlFlag);

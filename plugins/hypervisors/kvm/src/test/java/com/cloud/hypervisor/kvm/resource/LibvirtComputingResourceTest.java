@@ -4441,7 +4441,7 @@ public class LibvirtComputingResourceTest {
             when(libvirtUtilitiesHelper.getConnection()).thenReturn(conn);
             when(conn.storageVolLookupByPath(path)).thenReturn(v);
 
-            when(conn.getLibVirVersion()).thenReturn(10010l);
+            when(conn.getLibVersion()).thenReturn(10010l);
 
         } catch (final LibvirtException e) {
             fail(e.getMessage());

@@ -1013,7 +1013,7 @@ public class LibvirtComputingResource extends ServerResourceBase implements Serv
             conn = LibvirtConnection.getConnection();
 
             if (_bridgeType == BridgeType.OPENVSWITCH) {
-                if (conn.getLibVirVersion() < 10 * 1000 + 0) {
+                if (conn.getLibVersion() < 10 * 1000 + 0) {
                     throw new ConfigurationException("Libvirt version 0.10.0 required for openvswitch support, but version " + conn.getLibVirVersion() + " detected");
                 }
             }

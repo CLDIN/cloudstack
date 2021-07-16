@@ -94,7 +94,7 @@ public final class LibvirtResizeVolumeCommandWrapper extends CommandWrapper<Resi
                     final StorageVol v = conn.storageVolLookupByPath(path);
                     int flags = 0;
 
-                    if (conn.getLibVirVersion() > 1001000 && vol.getFormat() == PhysicalDiskFormat.RAW && pool.getType() != StoragePoolType.RBD) {
+                    if (conn.getLibVersion() > 1001000 && vol.getFormat() == PhysicalDiskFormat.RAW && pool.getType() != StoragePoolType.RBD) {
                         flags = 1;
                     }
                     if (shrinkOk) {
