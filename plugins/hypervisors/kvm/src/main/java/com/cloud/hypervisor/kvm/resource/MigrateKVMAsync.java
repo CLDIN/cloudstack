@@ -104,6 +104,11 @@ public class MigrateKVMAsync implements Callable<Domain> {
     public Domain call() throws LibvirtException {
         long flags = VIR_MIGRATE_LIVE;
 
+        long version = dconn.getLibVersion();
+        long version2 = dconn.getLibVirVersion();
+        long version3 = dconn.getVersion();
+        String uri1 = dconn.getURI();
+
         if (dconn.getLibVirVersion() >= LIBVIRT_VERSION_SUPPORTS_MIGRATE_COMPRESSED) {
             flags |= VIR_MIGRATE_COMPRESSED;
         }
@@ -121,6 +126,9 @@ public class MigrateKVMAsync implements Callable<Domain> {
             flags |= VIR_MIGRATE_AUTO_CONVERGE;
         }
 
-        return dm.migrate(dconn, flags, dxml, vmName, "tcp:" + destIp, libvirtComputingResource.getMigrateSpeed());
+        String proto = "tcp";
+        String uri = String.format("%s:%s", proto, destIp);
+
+        return dm.migrate(dconn, flags, dxml, vmName, uri, libvirtComputingResource.getMigrateSpeed());
     }
 }
