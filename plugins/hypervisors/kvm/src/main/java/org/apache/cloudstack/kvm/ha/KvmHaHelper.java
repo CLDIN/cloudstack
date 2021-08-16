@@ -31,6 +31,7 @@ import javax.inject.Inject;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -48,6 +49,7 @@ public class KvmHaHelper {
 
     private static final Logger LOGGER = Logger.getLogger(KvmHaHelper.class);
     private static final int CAUTIOUS_MARGIN_OF_VMS_ON_HOST = 1;
+    private static final int CHECK_NEIGHBOURS_ATTEMPT = 2;
 
     private static final Set<Status> PROBLEMATIC_HOST_STATUS = new HashSet<>(Arrays.asList(Status.Alert, Status.Disconnected, Status.Down, Status.Error));
 
@@ -60,6 +62,8 @@ public class KvmHaHelper {
         if (isVmsCountOnKvmMatchingWithDatabase) {
             agentStatus = Status.Up;
             LOGGER.debug(String.format("Checking agent %s status; KVM HA Agent is Running as expected.", agentStatus));
+        } else if (isHostAgentReachableByNeighbour(host)) {
+            LOGGER.warn(String.format("Checking agent %s status; CloudStack manager failed to reach KVM HA Agent but it was detected as Running by its neighbour hosts.", agentStatus));
         } else {
             LOGGER.warn(String.format("Checking agent %s status. Failed to check host status via KVM HA Agent", agentStatus));
         }
@@ -109,17 +113,19 @@ public class KvmHaHelper {
      */
     protected boolean isHostAgentReachableByNeighbour(Host host) {
         List<HostVO> neighbors = resourceManager.listHostsInClusterByStatus(host.getClusterId(), Status.Up);
-        for (HostVO neighbor : neighbors) {
-            boolean isVmActivtyOnNeighborHost = isKvmHaAgentHealthy(neighbor);
-            if (isVmActivtyOnNeighborHost) {
-                boolean isReachable = kvmHaAgentClient.isHostReachableByNeighbour(neighbor, host);
-                if (isReachable) {
-                    String.format("%s is reachable by neighbour %s. If CloudStack is failing to reach the respective host then it is probably a network issue between the host "
-                            + "and CloudStack management server.", host, neighbor);
-                    return true;
-                }
+        neighbors.remove(host);
+        Random random = new Random();
+
+        for (int i = 1; i < CHECK_NEIGHBOURS_ATTEMPT; i++) {
+            HostVO neighbor = neighbors.get(random.nextInt(neighbors.size()));
+            boolean isReachable = kvmHaAgentClient.isHostReachableByNeighbour(neighbor, host);
+            if (isReachable) {
+                String.format("%s is reachable by neighbour %s. If CloudStack is failing to reach the respective host then it is probably a network issue between the host "
+                        + "and CloudStack management server.", host, neighbor);
+                return true;
             }
         }
+
         return false;
     }
 

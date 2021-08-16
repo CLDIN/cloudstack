@@ -129,7 +129,7 @@ public class KvmHaAgentClient {
      *  Sends HTTP GET request from the host executing the KVM HA Agent webservice to a target Host (expected to also be running the KVM HA Agent).
      *  The webserver serves a JSON Object such as {"status": "Up"} if the request gets a HTTP_OK OR {"status": "Down"} if HTTP GET failed
      */
-    public boolean isHostReachableByNeighbour(Host neighbour, Host target) {
+    public boolean  isHostReachableByNeighbour(Host neighbour, Host target) {
         String neighbourHostAddress = neighbour.getPrivateIpAddress();
         String targetHostAddress = target.getPrivateIpAddress();
         int port = getKvmHaMicroservicePortValue(neighbour);
