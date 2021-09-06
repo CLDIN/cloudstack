@@ -2921,8 +2921,8 @@ public class VirtualMachineManagerImpl extends ManagerBase implements VirtualMac
      * For each one of the volumes we will map it to a storage pool that is available via the target host.
      * An exception is thrown if we cannot find a storage pool that is accessible in the target host to migrate the volume to.
      */
-    protected void createStoragePoolMappingsForVolumes(VirtualMachineProfile profile, DataCenterDeployment plan, Map<Volume, StoragePool> volumeToPoolObjectMap, List<Volume> allVolumes) {
-        for (Volume volume : allVolumes) {
+    protected void createStoragePoolMappingsForVolumes(VirtualMachineProfile profile, DataCenterDeployment plan, Map<Volume, StoragePool> volumeToPoolObjectMap, List<Volume> volumesNotMapped) {
+        for (Volume volume : volumesNotMapped) {
             StoragePoolVO currentPool = _storagePoolDao.findById(volume.getPoolId());
 
             Host targetHost = null;

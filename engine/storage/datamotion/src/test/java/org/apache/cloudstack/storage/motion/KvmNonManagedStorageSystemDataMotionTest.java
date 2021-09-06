@@ -75,8 +75,10 @@ import com.cloud.storage.dao.DiskOfferingDao;
 import com.cloud.storage.dao.VMTemplatePoolDao;
 import com.cloud.utils.exception.CloudRuntimeException;
 import com.cloud.vm.VirtualMachineManager;
+
 import java.util.HashSet;
 import java.util.Set;
+
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -198,13 +200,7 @@ public class KvmNonManagedStorageSystemDataMotionTest {
     }
 
     private Map<VolumeInfo, DataStore> configureTestInternalCanHandle(boolean isManagedStorage, StoragePoolType storagePoolType) {
-        VolumeObject volumeInfo = Mockito.spy(new VolumeObject());
-        Mockito.doReturn(0l).when(volumeInfo).getPoolId();
-        DataStore ds = Mockito.spy(new PrimaryDataStoreImpl());
-        Mockito.doReturn(0l).when(ds).getId();
-
-        Map<VolumeInfo, DataStore> volumeMap = new HashMap<>();
-        volumeMap.put(volumeInfo, ds);
+        Map<VolumeInfo, DataStore> volumeMap = configureVolumeMap();
 
         StoragePoolVO storagePool = Mockito.spy(new StoragePoolVO());
         Mockito.doReturn(storagePoolType).when(storagePool).getPoolType();
@@ -300,8 +296,8 @@ public class KvmNonManagedStorageSystemDataMotionTest {
             Mockito.doThrow(exception).when(agentManager).send(Mockito.anyLong(), Mockito.any(CopyCommand.class));
         }
 
-        Mockito.doNothing().when(kvmNonManagedStorageDataMotionStrategy).logInCaseOfTemplateCopyFailure(Mockito.any(Answer.class), Mockito.any(TemplateObjectTO.class),
-                Mockito.any(DataStore.class));
+        Mockito.doNothing().when(kvmNonManagedStorageDataMotionStrategy)
+                .logInCaseOfTemplateCopyFailure(Mockito.any(Answer.class), Mockito.any(TemplateObjectTO.class), Mockito.any(DataStore.class));
 
         kvmNonManagedStorageDataMotionStrategy.sendCopyCommand(destHost, sourceTemplate, destTemplate, destDataStore);
 
@@ -309,8 +305,8 @@ public class KvmNonManagedStorageSystemDataMotionTest {
 
         verifyInOrder.verify(virtualMachineManager).getExecuteInSequence(HypervisorType.KVM);
         verifyInOrder.verify(agentManager).send(Mockito.anyLong(), Mockito.any(CopyCommand.class));
-        verifyInOrder.verify(kvmNonManagedStorageDataMotionStrategy).logInCaseOfTemplateCopyFailure(Mockito.any(Answer.class), Mockito.any(TemplateObjectTO.class),
-                Mockito.any(DataStore.class));
+        verifyInOrder.verify(kvmNonManagedStorageDataMotionStrategy)
+                .logInCaseOfTemplateCopyFailure(Mockito.any(Answer.class), Mockito.any(TemplateObjectTO.class), Mockito.any(DataStore.class));
     }
 
     @Test
@@ -375,16 +371,17 @@ public class KvmNonManagedStorageSystemDataMotionTest {
         Mockito.when(templateDataFactory.getTemplate(Mockito.anyLong(), Mockito.eq(sourceTemplateDataStore))).thenReturn(sourceTemplateInfo);
         Mockito.when(templateDataFactory.getTemplate(Mockito.anyLong(), Mockito.eq(destDataStore))).thenReturn(sourceTemplateInfo);
         kvmNonManagedStorageDataMotionStrategy.copyTemplateToTargetFilesystemStorageIfNeeded(srcVolumeInfo, srcStoragePool, destDataStore, destStoragePool, destHost);
-        Mockito.lenient().doNothing().when(kvmNonManagedStorageDataMotionStrategy).updateTemplateReferenceIfSuccessfulCopy(Mockito.any(VolumeInfo.class), Mockito.any(StoragePool.class),
-                Mockito.any(TemplateInfo.class), Mockito.any(DataStore.class));
+        Mockito.lenient().doNothing().when(kvmNonManagedStorageDataMotionStrategy)
+                .updateTemplateReferenceIfSuccessfulCopy(Mockito.any(VolumeInfo.class), Mockito.any(StoragePool.class), Mockito.any(TemplateInfo.class),
+                        Mockito.any(DataStore.class));
 
         InOrder verifyInOrder = Mockito.inOrder(vmTemplatePoolDao, dataStoreManagerImpl, templateDataFactory, kvmNonManagedStorageDataMotionStrategy);
         verifyInOrder.verify(vmTemplatePoolDao, Mockito.times(1)).findByPoolTemplate(Mockito.anyLong(), Mockito.anyLong(), nullable(String.class));
         verifyInOrder.verify(dataStoreManagerImpl, Mockito.times(times)).getRandomImageStore(Mockito.anyLong());
         verifyInOrder.verify(templateDataFactory, Mockito.times(times)).getTemplate(Mockito.anyLong(), Mockito.eq(sourceTemplateDataStore));
         verifyInOrder.verify(templateDataFactory, Mockito.times(times)).getTemplate(Mockito.anyLong(), Mockito.eq(destDataStore));
-        verifyInOrder.verify(kvmNonManagedStorageDataMotionStrategy, Mockito.times(times)).sendCopyCommand(Mockito.eq(destHost), Mockito.any(TemplateObjectTO.class),
-                Mockito.any(TemplateObjectTO.class), Mockito.eq(destDataStore));
+        verifyInOrder.verify(kvmNonManagedStorageDataMotionStrategy, Mockito.times(times))
+                .sendCopyCommand(Mockito.eq(destHost), Mockito.any(TemplateObjectTO.class), Mockito.any(TemplateObjectTO.class), Mockito.eq(destDataStore));
     }
 
     @Before
@@ -502,6 +499,125 @@ public class KvmNonManagedStorageSystemDataMotionTest {
                 assertFalse(isSupported);
             }
         }
+    }
+
+    private Map<VolumeInfo, DataStore> configureVolumeMap() {
+        VolumeObject volumeInfo = Mockito.spy(new VolumeObject());
+        Mockito.doReturn(0l).when(volumeInfo).getPoolId();
+        Mockito.doReturn(Volume.Type.ROOT).when(volumeInfo).getVolumeType();
+        DataStore ds = Mockito.spy(new PrimaryDataStoreImpl());
+        Mockito.doReturn(0l).when(ds).getId();
+
+        Map<VolumeInfo, DataStore> volumeMap = new HashMap<>();
+        volumeMap.put(volumeInfo, ds);
+        return volumeMap;
+    }
+
+    @Test
+    public void isKvmNfsStorageMigrationTest() {
+        Host mockedHost = Mockito.mock(HostVO.class);
+        StrategyPriority[] strategies = StrategyPriority.values();
+        for (StrategyPriority strategy : strategies) {
+            boolean expected = strategy != StrategyPriority.CANT_HANDLE;
+            Mockito.doReturn(strategy).when(kvmNonManagedStorageDataMotionStrategy)
+                    .canHandleKVMNonManagedLiveNFSStorageMigration(Mockito.anyMap(), Mockito.any(HostVO.class), Mockito.any(HostVO.class));
+            boolean result = kvmNonManagedStorageDataMotionStrategy.isKvmNfsStorageMigration(configureVolumeMap(), mockedHost, mockedHost);
+            Assert.assertEquals(expected, result);
+        }
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestAllTrue() {
+        configureAndRunIsLocalStorageMigrationTest(true, true, true, true);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestAllFalse() {
+        configureAndRunIsLocalStorageMigrationTest(false, false, false, true);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestAllFalseNoDatadisk() {
+        configureAndRunIsLocalStorageMigrationTest(false, false, false, false);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestSupportPool() {
+        configureAndRunIsLocalStorageMigrationTest(false, true, true, true);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestDatadiskMigrated() {
+        configureAndRunIsLocalStorageMigrationTest(true, false, false, true);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestNoDatadisk() {
+        configureAndRunIsLocalStorageMigrationTest(true, false, false, false);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestNoDatadiskSupportedPool() {
+        configureAndRunIsLocalStorageMigrationTest(true, true, true, false);
+    }
+
+    @Test
+    public void isLocalStorageMigrationTestNoDatadiskSupportedPoolMigratingFalse() {
+        configureAndRunIsLocalStorageMigrationTest(false, true, true, false);
+    }
+
+    private void configureAndRunIsLocalStorageMigrationTest(boolean datadiskMigratingToOtherPool, boolean expected, boolean supportStoragePoolType, boolean hasDatadisk) {
+        Map<VolumeInfo, DataStore> volumeMap = configureVolumeMap();
+        if (hasDatadisk) {
+            VolumeObject volumeInfo = Mockito.spy(new VolumeObject());
+            Mockito.doReturn(0l).when(volumeInfo).getPoolId();
+            Mockito.doReturn(Volume.Type.DATADISK).when(volumeInfo).getVolumeType();
+            DataStore ds = Mockito.spy(new PrimaryDataStoreImpl());
+
+            if (datadiskMigratingToOtherPool) {
+                Mockito.doReturn(0l).when(ds).getId();
+            } else {
+                Mockito.doReturn(1l).when(ds).getId();
+            }
+            volumeMap.put(volumeInfo, ds);
+        }
+        StoragePoolVO storagePool = Mockito.spy(new StoragePoolVO());
+        Mockito.doReturn(StoragePoolType.NetworkFilesystem).when(storagePool).getPoolType();
+        Mockito.doReturn(storagePool).when(primaryDataStoreDao).findById(0l);
+
+        Mockito.doReturn(supportStoragePoolType).when(kvmNonManagedStorageDataMotionStrategy).supportStoragePoolType(Mockito.any(StoragePoolType.class));
+        boolean result = kvmNonManagedStorageDataMotionStrategy.isLocalStorageMigration(volumeMap);
+        Assert.assertEquals(expected, result);
+    }
+
+    @Test
+    public void internalCanHandleTestIsManagedIntegrationTestAllSupported() {
+        configureAndRunInternalCanHandleTestIsManagedIntegrationTest(true, true, StrategyPriority.HYPERVISOR);
+    }
+
+    @Test
+    public void internalCanHandleTestIsManagedIntegrationTestNfsStorageMigration() {
+        configureAndRunInternalCanHandleTestIsManagedIntegrationTest(true, false, StrategyPriority.HYPERVISOR);
+    }
+
+    @Test
+    public void internalCanHandleTestIsManagedIntegrationTestLocalStorage() {
+        configureAndRunInternalCanHandleTestIsManagedIntegrationTest(false, true, StrategyPriority.HYPERVISOR);
+    }
+
+    @Test
+    public void internalCanHandleTestIsManagedIntegrationTestCantHandle() {
+        configureAndRunInternalCanHandleTestIsManagedIntegrationTest(false, false, StrategyPriority.CANT_HANDLE);
+    }
+
+    private void configureAndRunInternalCanHandleTestIsManagedIntegrationTest(boolean isKvmNfsStorageMigration, boolean isLocalStorageMigration, StrategyPriority expected) {
+        Host mockedHost = Mockito.mock(Host.class);
+        Map<VolumeInfo, DataStore> volumeMap = configureTestInternalCanHandle(false, StoragePoolType.NetworkFilesystem);
+        Mockito.doReturn(isKvmNfsStorageMigration).when(kvmNonManagedStorageDataMotionStrategy)
+                .isKvmNfsStorageMigration(Mockito.anyMap(), Mockito.any(), Mockito.any());
+        Mockito.doReturn(isLocalStorageMigration).when(kvmNonManagedStorageDataMotionStrategy).isLocalStorageMigration(Mockito.anyMap());
+        StrategyPriority result = kvmNonManagedStorageDataMotionStrategy.internalCanHandle(volumeMap, mockedHost, mockedHost);
+        Assert.assertEquals(expected, result);
     }
 
 }

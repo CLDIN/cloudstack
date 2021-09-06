@@ -20,7 +20,6 @@ package org.apache.cloudstack.storage.motion;
 
 import java.io.File;
 import java.util.Map;
-import java.util.Set;
 
 import javax.inject.Inject;
 
@@ -83,26 +82,51 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
     @Override
     protected StrategyPriority internalCanHandle(Map<VolumeInfo, DataStore> volumeMap, Host srcHost, Host destHost) {
         if (super.internalCanHandle(volumeMap, srcHost, destHost) == StrategyPriority.CANT_HANDLE) {
-            if (canHandleKVMNonManagedLiveNFSStorageMigration(volumeMap, srcHost, destHost) == StrategyPriority.CANT_HANDLE) {
-                Set<VolumeInfo> volumeInfoSet = volumeMap.keySet();
-
-                for (VolumeInfo volumeInfo : volumeInfoSet) {
-                    StoragePoolVO storagePoolVO = _storagePoolDao.findById(volumeInfo.getPoolId());
-
-                    if (!supportStoragePoolType(storagePoolVO.getPoolType())) {
-                        return StrategyPriority.CANT_HANDLE;
-                    }
-                }
+            if (isKvmNfsStorageMigration(volumeMap, srcHost, destHost) || isLocalStorageMigration(volumeMap)) {
+                return StrategyPriority.HYPERVISOR;
             }
-            return StrategyPriority.HYPERVISOR;
         }
         return StrategyPriority.CANT_HANDLE;
     }
 
     /**
-     * Allow KVM live storage migration for non managed storage when:
-     * - Source host and destination host are different, and are on the same cluster
-     * - Source and destination storage are NFS
+     * Returns true if the Strategy from canHandleKVMNonManagedLiveNFSStorageMigration is not "CANT_HANDLE". Which happen in the following cases: <br>
+     * - Source host and destination host are different, and are on the same cluster <br>
+     * - Source and destination storage are NFS <br>
+     * - Destination storage is cluster-wide
+     */
+    protected boolean isKvmNfsStorageMigration(Map<VolumeInfo, DataStore> volumeMap, Host srcHost, Host destHost) {
+        return canHandleKVMNonManagedLiveNFSStorageMigration(volumeMap, srcHost, destHost) != StrategyPriority.CANT_HANDLE;
+    }
+
+    /**
+     * Returns true if the VM's volumes are either local (Root) or a datadisk that is not going to be migrated; therefore: <br>
+     * - Volume is allocated in a storage pool of type Filesystem (local storage) <br>
+     * - In case of a data-disk, the source pool and destination pool are the same
+     */
+    protected boolean isLocalStorageMigration(Map<VolumeInfo, DataStore> volumeMap) {
+        boolean isLocalStorageMigration = false;
+        for (Map.Entry<VolumeInfo, DataStore> volumeMapEntry : volumeMap.entrySet()) {
+            long sourcePoolId = volumeMapEntry.getKey().getPoolId();
+            long targetPoolId = volumeMapEntry.getValue().getId();
+
+            StoragePoolVO storagePoolVO = _storagePoolDao.findById(sourcePoolId);
+            boolean isStoragePoolTypeSupported = supportStoragePoolType(storagePoolVO.getPoolType());
+            boolean isDatadiskAndSourcePoolSameAsTarget = sourcePoolId == targetPoolId && Volume.Type.DATADISK == volumeMapEntry.getKey().getVolumeType();
+
+            if (isStoragePoolTypeSupported || isDatadiskAndSourcePoolSameAsTarget) {
+                isLocalStorageMigration = true;
+            } else {
+                return false;
+            }
+        }
+        return isLocalStorageMigration;
+    }
+
+    /**
+     * Allow KVM live storage migration for non managed storage when: <br>
+     * - Source host and destination host are different, and are on the same cluster <br>
+     * - Source and destination storage are NFS <br>
      * - Destination storage is cluster-wide
      */
     protected StrategyPriority canHandleKVMNonManagedLiveNFSStorageMigration(Map<VolumeInfo, DataStore> volumeMap,
@@ -155,7 +179,7 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
     }
 
     /**
-     * Generates the volume path by appending the Volume UUID to the Libvirt destiny images path.</br>
+     * Generates the volume path by appending the Volume UUID to the Libvirt destiny images path. <br>
      * Example: /var/lib/libvirt/images/f3d49ecc-870c-475a-89fa-fd0124420a9b
      */
     @Override
@@ -183,7 +207,7 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
     }
 
     /**
-     * Return true if the volume should be migrated. Currently only supports migrating volumes on storage pool of the type StoragePoolType.Filesystem.
+     * Return true if the volume should be migrated. Currently, only supports migrating volumes on storage pool of the type StoragePoolType.Filesystem. <br>
      * This ensures that volumes on shared storage are not migrated and those on local storage pools are migrated.
      */
     @Override
