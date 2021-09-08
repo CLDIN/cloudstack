@@ -247,6 +247,7 @@ public class KvmNonManagedStorageSystemDataMotionTest {
     @Test
     public void shouldMigrateVolumeTest() {
         StoragePoolVO sourceStoragePool = Mockito.spy(new StoragePoolVO());
+        Mockito.when(sourceStoragePool.getId()).thenReturn(1l);
         HostVO destHost = new HostVO("guid");
         StoragePoolVO destStoragePool = new StoragePoolVO();
         StoragePoolType[] storagePoolTypes = StoragePoolType.values();

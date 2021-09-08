@@ -212,6 +212,10 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
      */
     @Override
     protected boolean shouldMigrateVolume(StoragePoolVO sourceStoragePool, Host destHost, StoragePoolVO destStoragePool) {
+        boolean isSamePool = sourceStoragePool.getId() == destStoragePool.getId();
+        if (isSamePool) {
+            return false;
+        }
         return supportStoragePoolType(sourceStoragePool.getPoolType());
     }
 
