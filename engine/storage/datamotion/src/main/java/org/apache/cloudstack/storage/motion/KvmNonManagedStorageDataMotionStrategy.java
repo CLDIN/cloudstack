@@ -207,19 +207,6 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
     }
 
     /**
-     * Return true if the volume should be migrated. Currently, only supports migrating volumes on storage pool of the type StoragePoolType.Filesystem. <br>
-     * This ensures that volumes on shared storage are not migrated and those on local storage pools are migrated.
-     */
-    @Override
-    protected boolean shouldMigrateVolume(StoragePoolVO sourceStoragePool, Host destHost, StoragePoolVO destStoragePool) {
-        boolean isSamePool = sourceStoragePool.getId() == destStoragePool.getId();
-        if (isSamePool) {
-            return false;
-        }
-        return supportStoragePoolType(sourceStoragePool.getPoolType());
-    }
-
-    /**
      * If the template is not on the target primary storage then it copies the template.
      */
     @Override
@@ -250,6 +237,19 @@ public class KvmNonManagedStorageDataMotionStrategy extends StorageSystemDataMot
             }
         }
         LOGGER.debug(String.format("Skipping 'copy template to target filesystem storage before migration' due to the template [%s] already exist on the storage pool [%s].", srcVolumeInfo.getTemplateId(), destStoragePool.getId()));
+    }
+
+    /**
+     * Return true if the volume should be migrated. Currently, only supports migrating volumes on storage pool of the type StoragePoolType.Filesystem. <br>
+     * This ensures that volumes on shared storage are not migrated and those on local storage pools are migrated.
+     */
+    @Override
+    protected boolean shouldMigrateVolume(StoragePoolVO sourceStoragePool, Host destHost, StoragePoolVO destStoragePool) {
+        boolean isSamePool = sourceStoragePool.getId() == destStoragePool.getId();
+        if (isSamePool) {
+            return false;
+        }
+        return supportStoragePoolType(sourceStoragePool.getPoolType());
     }
 
     /**
