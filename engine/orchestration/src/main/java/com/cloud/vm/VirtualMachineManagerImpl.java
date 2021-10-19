@@ -2763,10 +2763,23 @@ public class VirtualMachineManagerImpl extends ManagerBase implements VirtualMac
             executeManagedStorageChecksWhenTargetStoragePoolNotProvided(targetHost, currentPool, volume);
             if (ScopeType.HOST.equals(currentPool.getScope()) || isStorageCrossClusterMigration(targetHost, currentPool)) {
                 createVolumeToStoragePoolMappingIfPossible(profile, targetHost, volumeToPoolObjectMap, volume, currentPool);
-            } else {
+            } else if (shouldMapVolume(profile, volume, currentPool)) {
                 volumeToPoolObjectMap.put(volume, currentPool);
             }
         }
+    }
+
+    /**
+     * Returns true if it should map the volume for a storage pool to migrate.
+     * <br><br>
+     * Some context: VMware migration workflow requires all volumes to be mapped (even if volume stays on its current pool);
+     *  however, this is not necessary/desirable for the KVM flow.
+     */
+    protected boolean shouldMapVolume(VirtualMachineProfile profile, Volume volume, StoragePoolVO currentPool) {
+        boolean isManaged = currentPool.isManaged();
+        boolean isNotKvm = HypervisorType.KVM != profile.getHypervisorType();
+        boolean isNotDatadisk = Type.DATADISK != volume.getVolumeType();
+        return isNotKvm || isNotDatadisk || isManaged;
     }
 
     /**
