@@ -358,6 +358,7 @@
                 </template>
               </a-step>
               <a-step
+                v-if="isUserAllowedToListSshKeys"
                 :title="this.$t('label.sshkeypairs')"
                 :status="zoneSelected ? 'process' : 'wait'">
                 <template slot="description">
@@ -997,6 +998,12 @@ export default {
     },
     showSecurityGroupSection () {
       return (this.networks.length > 0 && this.zone.securitygroupsenabled) || (this.zone && this.zone.networktype === 'Basic')
+    },
+    isUserAllowedToListSshKeys () {
+      return Boolean('listSSHKeyPairs' in this.$store.getters.apis)
+    },
+    dynamicScalingVmConfigValue () {
+      return this.options.dynamicScalingVmConfig?.[0]?.value === 'true'
     },
     isCustomizedDiskIOPS () {
       return this.diskSelected?.iscustomizediops || false
