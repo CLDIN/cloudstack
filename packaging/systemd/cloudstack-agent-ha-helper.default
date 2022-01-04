@@ -15,4 +15,13 @@
 # specific language governing permissions and limitations
 # under the License.
 
-PORT=8080
+# The agent-ha-helper.py provides a HTTP server which handles API requests to identify if the host (or a neighbour host) is healthy.
+# optional arguments:
+
+# PORT  Port to be used by the agent-ha-helper server
+# PORT=443
+
+# If uncommented, it passes flag that allows to deploy the HTTP server without SSL
+# To enable HTTP requests then make it
+# SECURITY_MODE="--insecure"
+# Default is HTTPS leave it commented to keep HTTPS
