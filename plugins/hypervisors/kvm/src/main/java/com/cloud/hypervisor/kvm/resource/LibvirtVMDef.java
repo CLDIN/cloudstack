@@ -38,6 +38,13 @@ public class LibvirtVMDef {
     private String _platformEmulator;
     private final Map<String, Object> components = new HashMap<String, Object>();
 
+    /**
+     * Indicates to Libvirt that this disk device is on a shared storage pool. <br>
+     * Useful for local storage migration '--copy-storage-all' (or flag VIR_MIGRATE_NON_SHARED_DISK). <br> <br>
+     * This way, Libvirt does not map the volume to be migrated, when just non-shared volumes should be migrated.
+     */
+    private static final String SHAREABLE = "<shareable/>\n";
+
     public static class GuestDef {
         enum GuestType {
             KVM, XEN, EXE, LXC
@@ -1136,6 +1143,10 @@ public class LibvirtVMDef {
                 }
 
                 diskBuilder.append("</iotune>\n");
+            }
+
+            if (_diskType == DiskType.NETWORK) {
+                diskBuilder.append(SHAREABLE);
             }
 
             diskBuilder.append("</disk>\n");
