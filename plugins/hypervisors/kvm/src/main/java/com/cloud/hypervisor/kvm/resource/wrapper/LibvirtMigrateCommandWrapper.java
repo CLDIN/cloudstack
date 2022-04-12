@@ -173,8 +173,11 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             final boolean migrateStorage = MapUtils.isNotEmpty(mapMigrateStorage);
             final boolean migrateStorageManaged = command.isMigrateStorageManaged();
 
+            String rootDiskDiskDeviceLabel = null;
             if (migrateStorage) {
                 xmlDesc = replaceStorage(xmlDesc, mapMigrateStorage, migrateStorageManaged);
+                DiskDef rootDisk = disks.get(0);
+                rootDiskDiskDeviceLabel = rootDisk.getDiskLabel();
             }
 
             Map<String, DpdkTO> dpdkPortsMapping = command.getDpdkInterfaceMapping();
@@ -192,10 +195,11 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             s_logger.info("Live migration of instance " + vmName + " initiated to destination host: " + dconn.getURI());
             final ExecutorService executor = Executors.newFixedThreadPool(1);
             boolean migrateNonSharedInc = command.isMigrateNonSharedInc() && !migrateStorageManaged;
+            boolean isCompressed = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.VM_MIGRATE_DOMAIN_COMPRESSED);
 
             final Callable<Domain> worker = new MigrateKVMAsync(libvirtComputingResource, dm, dconn, xmlDesc,
                     migrateStorage, migrateNonSharedInc,
-                    command.isAutoConvergence(), vmName, command.getDestinationIp());
+                    command.isAutoConvergence(), vmName, command.getDestinationIp(), rootDiskDiskDeviceLabel, isCompressed);
             final Future<Domain> migrateThread = executor.submit(worker);
             executor.shutdown();
             long sleeptime = 0;

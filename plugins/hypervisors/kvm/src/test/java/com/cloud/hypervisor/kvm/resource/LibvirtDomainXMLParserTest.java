@@ -19,16 +19,15 @@
 
 package com.cloud.hypervisor.kvm.resource;
 
-import java.io.File;
-import java.util.List;
-
 import com.cloud.hypervisor.kvm.resource.LibvirtVMDef.ChannelDef;
 import com.cloud.hypervisor.kvm.resource.LibvirtVMDef.DiskDef;
 import com.cloud.hypervisor.kvm.resource.LibvirtVMDef.InterfaceDef;
 import com.cloud.hypervisor.kvm.resource.LibvirtVMDef.RngDef;
 import com.cloud.hypervisor.kvm.resource.LibvirtVMDef.WatchDogDef;
-
 import junit.framework.TestCase;
+
+import java.io.File;
+import java.util.List;
 
 public class LibvirtDomainXMLParserTest extends TestCase {
 

@@ -40,6 +40,15 @@ public class AgentProperties{
     public static final Property<Integer> VM_MIGRATE_DOMAIN_RETRIEVE_TIMEOUT = new Property<Integer>("vm.migrate.domain.retrieve.timeout", 10);
 
     /**
+     * Activates compression "flag" for the Libvirt domain "migrate" command, which enables compressing memory when Libvirt does live migration. <br>
+     * Memory compression is supported since Libvirt 1.0.3. Despite it is good to reduce bandwidth, this requires more CPU processing time in order to (de)compress. <br>
+     * For more details, please @see <a href="https://libvirt.org/manpages/virsh.html#migrate"> Libvirt documentation</a> <br>
+     * Data type: boolean. <br>
+     * Default value: true.
+     */
+    public static final Property<Boolean> VM_MIGRATE_DOMAIN_COMPRESSED = new Property<Boolean>("vm.migrate.domain.compressed", true);
+
+    /**
      * Reboot host and alert management on heartbeat timeout. <br>
      * Data type: boolean.<br>
      * Default value: true.

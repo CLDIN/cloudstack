@@ -20,13 +20,12 @@ package com.cloud.hypervisor.kvm.resource;
 
 import java.util.concurrent.Callable;
 
-import org.jetbrains.annotations.Nullable;
 import org.libvirt.Connect;
 import org.libvirt.Domain;
 import org.libvirt.LibvirtException;
-import org.libvirt.TypedIntParameter;
 import org.libvirt.TypedParameter;
 import org.libvirt.TypedStringParameter;
+import org.libvirt.TypedUlongParameter;
 
 public class MigrateKVMAsync implements Callable<Domain> {
 
@@ -37,10 +36,11 @@ public class MigrateKVMAsync implements Callable<Domain> {
     private String dxml = "";
     private String vmName = "";
     private String destIp = "";
+    private String rootDiskDiskDeviceLabel = null;
     private boolean migrateStorage;
     private boolean migrateNonSharedInc;
     private boolean autoConvergence;
-
+    private boolean isCompressed;
     // Libvirt Migrate Flags reference:
     // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainMigrateFlags
 
@@ -95,9 +95,11 @@ public class MigrateKVMAsync implements Callable<Domain> {
     private static final String VIR_MIGRATE_PARAM_BANDWIDTH = "bandwidth";
     private static final String VIR_MIGRATE_PARAM_DEST_NAME = "destination_name";
     private static final String VIR_MIGRATE_PARAM_URI = "migrate_uri";
+    private static final String TCP_URI = "tcp:";
 
-    public MigrateKVMAsync(final LibvirtComputingResource libvirtComputingResource, final Domain dm, final Connect dconn, final String dxml,
-            final boolean migrateStorage, final boolean migrateNonSharedInc, final boolean autoConvergence, final String vmName, final String destIp) {
+    public MigrateKVMAsync(final LibvirtComputingResource libvirtComputingResource, final Domain dm, final Connect dconn, final String dxml, final boolean migrateStorage,
+            final boolean migrateNonSharedInc, final boolean autoConvergence, final String vmName, final String destIp, final String rootDiskDiskDeviceLabel,
+            final boolean isCompressed) {
         this.libvirtComputingResource = libvirtComputingResource;
 
         this.dm = dm;
@@ -108,13 +110,19 @@ public class MigrateKVMAsync implements Callable<Domain> {
         this.autoConvergence = autoConvergence;
         this.vmName = vmName;
         this.destIp = destIp;
+        this.rootDiskDiskDeviceLabel = rootDiskDiskDeviceLabel;
+        this.isCompressed = isCompressed;
     }
 
     @Override
     public Domain call() throws LibvirtException {
         long flags = VIR_MIGRATE_LIVE;
+        String uri = TCP_URI + destIp;
 
-        if (dconn.getLibVirVersion() >= LIBVIRT_VERSION_SUPPORTS_MIGRATE_COMPRESSED) {
+        long libvirtVersionDeprecated = dconn.getLibVirVersion();
+        long libvirtVersion = dconn.getLibVersion();
+
+        if (isCompressed && dconn.getLibVirVersion() >= LIBVIRT_VERSION_SUPPORTS_MIGRATE_COMPRESSED) {
             flags |= VIR_MIGRATE_COMPRESSED;
         }
 
@@ -131,35 +139,29 @@ public class MigrateKVMAsync implements Callable<Domain> {
             flags |= VIR_MIGRATE_AUTO_CONVERGE;
         }
 
-        Domain domainMigrateDisks = migrateDisks(flags);
-        if (domainMigrateDisks != null) {
-            return domainMigrateDisks;
+        if (migrateStorage && !migrateNonSharedInc) {
+            return migrateRootDisk(flags, rootDiskDiskDeviceLabel, uri);
         }
-
-        return dm.migrate(dconn, flags, dxml, vmName, "tcp:" + destIp, libvirtComputingResource.getMigrateSpeed());
+        return dm.migrate(dconn, flags, dxml, vmName, uri, libvirtComputingResource.getMigrateSpeed());
     }
 
-    @Nullable
-    private Domain migrateDisks(long flags) throws LibvirtException {
-        String uri = "tcp:" + destIp;
-        String diskDeviceName = "vda";
+    /**
+     * TODO documentation for a clear method
+     * @param flags
+     * @param diskDeviceName
+     * @param uri
+     * @return
+     * @throws LibvirtException
+     */
+    private Domain migrateRootDisk(long flags, String diskDeviceName, String uri) throws LibvirtException {
         int nParams = 5;
         TypedParameter[] params = new TypedParameter[nParams];
-//        Destination XML (dxml)
-        params[0] = new TypedStringParameter(VIR_MIGRATE_PARAM_DEST_XML, dxml.toCharArray());
-//        VM name (dname)
-        params[1] = new TypedStringParameter(VIR_MIGRATE_PARAM_DEST_NAME, vmName.toCharArray());
-//        URI
-        params[2] = new TypedStringParameter(VIR_MIGRATE_PARAM_URI, uri.toCharArray());
-//      VIR_MIGRATE_PARAM_BANDWIDTH
-        params[3] = new TypedIntParameter(VIR_MIGRATE_PARAM_BANDWIDTH, libvirtComputingResource.getMigrateSpeed());
-//      VIR_MIGRATE_PARAM_MIGRATE_DISKS
-        params[4] = new TypedStringParameter(VIR_MIGRATE_PARAM_MIGRATE_DISKS, diskDeviceName.toCharArray());
-
-        boolean test = false;
-        if(test) {
-            return dm.migrate3(dconn, params, nParams, flags);
-        }
-        return null;
+        params[0] = new TypedStringParameter(VIR_MIGRATE_PARAM_DEST_XML, dxml);
+        params[1] = new TypedStringParameter(VIR_MIGRATE_PARAM_DEST_NAME, vmName);
+        params[2] = new TypedStringParameter(VIR_MIGRATE_PARAM_URI, uri);
+        params[3] = new TypedUlongParameter(VIR_MIGRATE_PARAM_BANDWIDTH, (long)libvirtComputingResource.getMigrateSpeed());
+        params[4] = new TypedStringParameter(VIR_MIGRATE_PARAM_MIGRATE_DISKS, diskDeviceName);
+        return dm.migrate(dconn, params, flags);
     }
+
 }
