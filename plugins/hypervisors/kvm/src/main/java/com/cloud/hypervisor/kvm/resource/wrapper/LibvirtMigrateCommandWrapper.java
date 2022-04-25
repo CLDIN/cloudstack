@@ -45,6 +45,8 @@ import javax.xml.transform.stream.StreamResult;
 
 import com.cloud.agent.api.to.DiskTO;
 import com.cloud.agent.api.to.DpdkTO;
+import com.cloud.agent.properties.AgentProperties;
+import com.cloud.agent.properties.AgentPropertiesFileHandler;
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.StringUtils;
@@ -170,8 +172,10 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             final boolean migrateStorage = MapUtils.isNotEmpty(mapMigrateStorage);
             final boolean migrateStorageManaged = command.isMigrateStorageManaged();
 
+            String rootDiskDiskDeviceLabel = null;
             if (migrateStorage) {
                 xmlDesc = replaceStorage(xmlDesc, mapMigrateStorage, migrateStorageManaged);
+                rootDiskDiskDeviceLabel = retrieveLocalRootDiskDeviceLabel(disks);
             }
 
             Map<String, DpdkTO> dpdkPortsMapping = command.getDpdkInterfaceMapping();
@@ -189,10 +193,11 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
             s_logger.info("Live migration of instance " + vmName + " initiated to destination host: " + dconn.getURI());
             final ExecutorService executor = Executors.newFixedThreadPool(1);
             boolean migrateNonSharedInc = command.isMigrateNonSharedInc() && !migrateStorageManaged;
+            boolean isCompressed = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.VM_MIGRATE_DOMAIN_COMPRESSED);
 
             final Callable<Domain> worker = new MigrateKVMAsync(libvirtComputingResource, dm, dconn, xmlDesc,
                     migrateStorage, migrateNonSharedInc,
-                    command.isAutoConvergence(), vmName, command.getDestinationIp());
+                    command.isAutoConvergence(), vmName, command.getDestinationIp(), rootDiskDiskDeviceLabel, isCompressed);
             final Future<Domain> migrateThread = executor.submit(worker);
             executor.shutdown();
             long sleeptime = 0;
@@ -299,6 +304,24 @@ public final class LibvirtMigrateCommandWrapper extends CommandWrapper<MigrateCo
         }
 
         return new MigrateAnswer(command, result == null, result, null);
+    }
+
+    /**
+     * It returns the label of the Root disk in case it is placed in a local storage.
+     * In such cases, the disk device is of type "File".
+     * If the Root volume is not in local storage then it returns null.
+     * Example of output: "sda".
+     *
+     * @Note: At the moment of this implementation, CloudStack supports only Root volumes to be placed in Local storage.
+     *        It is not possible to have local data-disk, therefore, only one device of type "Disk" can be a "File".
+     *        Domain's XML contain also "DeviceType.CDROM" of type "DiskDef.DiskType.FILE", which is filtered in this method.
+     */
+    protected String retrieveLocalRootDiskDeviceLabel(List<DiskDef> disks) {
+        DiskDef diskDef = disks.get(0);
+        if (DiskDef.DiskType.FILE == diskDef.getDiskType() && DiskDef.DeviceType.DISK == diskDef.getDeviceType()) {
+            return diskDef.getDiskLabel();
+        }
+        return null;
     }
 
     /**
