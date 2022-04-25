@@ -107,9 +107,11 @@ public class StoragePoolMonitor implements Listener {
                 pools.addAll(zoneStoragePoolsByTags);
                 List<StoragePoolVO> zoneStoragePoolsByAnyHypervisor = _poolDao.findZoneWideStoragePoolsByHypervisor(host.getDataCenterId(), HypervisorType.Any);
                 pools.addAll(zoneStoragePoolsByAnyHypervisor);
+                pools.addAll(_poolDao.findDisabledPoolsByScope(host.getDataCenterId(), null, null, ScopeType.ZONE));
+                pools.addAll(_poolDao.findDisabledPoolsByScope(host.getDataCenterId(), host.getPodId(), host.getClusterId(), ScopeType.CLUSTER));
 
                 for (StoragePoolVO pool : pools) {
-                    if (pool.getStatus() != StoragePoolStatus.Up) {
+                    if (pool.getStatus() != StoragePoolStatus.Up && pool.getStatus() != StoragePoolStatus.Up) {
                         continue;
                     }
                     if (!pool.isShared()) {
