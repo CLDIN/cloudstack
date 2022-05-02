@@ -22,7 +22,7 @@
     <parent>
         <groupId>org.apache.cloudstack</groupId>
         <artifactId>cloudstack-plugins</artifactId>
-        <version>4.15.2.1-cldin</version>
+        <version>4.15.2.2-cldin</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
     <artifactId>cloud-plugin-hypervisor-baremetal</artifactId>
