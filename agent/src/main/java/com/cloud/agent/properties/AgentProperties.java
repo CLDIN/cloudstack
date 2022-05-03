@@ -48,6 +48,8 @@ public class AgentProperties{
      */
     public static final Property<Boolean> VM_MIGRATE_DOMAIN_COMPRESSED = new Property<Boolean>("vm.migrate.domain.compressed", true);
 
+    public static final Property<Boolean> VM_MIGRATE_DOMAIN_ROOT_DISK = new Property<Boolean>("vm.migrate.domain.root.disk", true);
+
     /**
      * Reboot host and alert management on heartbeat timeout. <br>
      * Data type: boolean.<br>

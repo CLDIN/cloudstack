@@ -111,7 +111,7 @@ public class StoragePoolMonitor implements Listener {
                 pools.addAll(_poolDao.findDisabledPoolsByScope(host.getDataCenterId(), host.getPodId(), host.getClusterId(), ScopeType.CLUSTER));
 
                 for (StoragePoolVO pool : pools) {
-                    if (pool.getStatus() != StoragePoolStatus.Up && pool.getStatus() != StoragePoolStatus.Up) {
+                    if (pool.getStatus() != StoragePoolStatus.Up && pool.getStatus() != StoragePoolStatus.Disabled) {
                         continue;
                     }
                     if (!pool.isShared()) {

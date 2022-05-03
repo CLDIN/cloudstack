@@ -20,6 +20,8 @@ package com.cloud.hypervisor.kvm.resource;
 
 import java.util.concurrent.Callable;
 
+import com.cloud.agent.properties.AgentProperties;
+import com.cloud.agent.properties.AgentPropertiesFileHandler;
 import org.apache.commons.lang3.StringUtils;
 import org.libvirt.Connect;
 import org.libvirt.Domain;
@@ -41,7 +43,6 @@ public class MigrateKVMAsync implements Callable<Domain> {
     private boolean migrateStorage;
     private boolean migrateNonSharedInc;
     private boolean autoConvergence;
-    private boolean isCompressed;
 
     // Libvirt Migrate Flags reference:
     // https://libvirt.org/html/libvirt-libvirt-domain.html#virDomainMigrateFlags
@@ -95,7 +96,7 @@ public class MigrateKVMAsync implements Callable<Domain> {
 
     public MigrateKVMAsync(final LibvirtComputingResource libvirtComputingResource, final Domain dm, final Connect dconn, final String dxml,
             final boolean migrateStorage, final boolean migrateNonSharedInc, final boolean autoConvergence, final String vmName, final String destIp,
-            final String rootDiskDiskDeviceLabel, final boolean isCompressed) {
+            final String rootDiskDiskDeviceLabel) {
         this.libvirtComputingResource = libvirtComputingResource;
 
         this.dm = dm;
@@ -107,13 +108,14 @@ public class MigrateKVMAsync implements Callable<Domain> {
         this.vmName = vmName;
         this.destIp = destIp;
         this.rootDiskDiskDeviceLabel = rootDiskDiskDeviceLabel;
-        this.isCompressed = isCompressed;
     }
 
     @Override
     public Domain call() throws LibvirtException {
         long flags = VIR_MIGRATE_LIVE;
         String destUri = TCP_URI + destIp;
+        boolean isCompressed = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.VM_MIGRATE_DOMAIN_COMPRESSED);
+        boolean isRootDiskMigrationEnabled = AgentPropertiesFileHandler.getPropertyValue(AgentProperties.VM_MIGRATE_DOMAIN_ROOT_DISK);
 
         if (isCompressed && dconn.getLibVirVersion() >= LIBVIRT_VERSION_SUPPORTS_MIGRATE_COMPRESSED) {
             flags |= VIR_MIGRATE_COMPRESSED;
@@ -132,7 +134,7 @@ public class MigrateKVMAsync implements Callable<Domain> {
             flags |= VIR_MIGRATE_AUTO_CONVERGE;
         }
 
-        if (StringUtils.isNotBlank(rootDiskDiskDeviceLabel) && migrateStorage && !migrateNonSharedInc) {
+        if (isRootDiskMigrationEnabled && StringUtils.isNotBlank(rootDiskDiskDeviceLabel) && migrateStorage && !migrateNonSharedInc) {
             return migrateRootDisk(flags, rootDiskDiskDeviceLabel, destUri);
         }
         return dm.migrate(dconn, flags, dxml, vmName, destUri, libvirtComputingResource.getMigrateSpeed());
