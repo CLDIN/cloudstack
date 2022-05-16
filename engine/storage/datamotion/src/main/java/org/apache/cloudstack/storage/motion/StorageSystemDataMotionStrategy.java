@@ -1792,10 +1792,11 @@ public class StorageSystemDataMotionStrategy implements DataMotionStrategy {
                 }
 
                 if (srcVolumeInfo.getTemplateId() != null) {
-                    LOGGER.debug(String.format("Copying template [%s] of volume [%s] from source storage pool [%s] to target storage pool [%s].", srcVolumeInfo.getTemplateId(), srcVolumeInfo.getId(), sourceStoragePool.getId(), destStoragePool.getId()));
-                    copyTemplateToTargetFilesystemStorageIfNeeded(srcVolumeInfo, sourceStoragePool, destDataStore, destStoragePool, destHost);
+                    copyTemplateIfNeeded(destHost, srcVolumeInfo, destDataStore, destStoragePool, sourceStoragePool);
                 } else {
-                    LOGGER.debug(String.format("Skipping copy template from source storage pool [%s] to target storage pool [%s] before migration due to volume [%s] does not have a template.", sourceStoragePool.getId(), destStoragePool.getId(), srcVolumeInfo.getId()));
+                    LOGGER.debug(String.format(
+                            "Skipping copy template from source storage pool [%s] to target storage pool [%s] before migration due to volume [%s] does not have a template.",
+                            sourceStoragePool.getId(), destStoragePool.getId(), srcVolumeInfo.getId()));
                 }
 
                 VolumeVO destVolume = duplicateVolumeOnAnotherStorage(srcVolume, destStoragePool);
@@ -1919,6 +1920,23 @@ public class StorageSystemDataMotionStrategy implements DataMotionStrategy {
         }
     }
 
+    /**
+     * Copies template to target File system storage in case needed.
+     * Also, must check for non null template, in case template has been (force) deleted but there are still VMs with it.
+     */
+    private void copyTemplateIfNeeded(Host destHost, VolumeInfo srcVolumeInfo, DataStore destDataStore, StoragePoolVO destStoragePool,
+            StoragePoolVO sourceStoragePool) {
+        VMTemplateVO vmTemplate = _vmTemplateDao.findById(srcVolumeInfo.getTemplateId());
+        if (vmTemplate != null) {
+            LOGGER.debug(String.format("Copying template [%s] of volume [%s] from source storage pool [%s] to target storage pool [%s].", srcVolumeInfo.getTemplateId(),
+                    srcVolumeInfo.getId(), sourceStoragePool.getId(), destStoragePool.getId()));
+            copyTemplateToTargetFilesystemStorageIfNeeded(srcVolumeInfo, sourceStoragePool, destDataStore, destStoragePool, destHost);
+        } else {
+            LOGGER.debug(String.format("Template [%s] has been (force) removed while there were VMs using it. Skipping step for copying Volume [%s] template.",
+                    srcVolumeInfo.getTemplateId(), srcVolumeInfo.getId()));
+        }
+    }
+
     protected String formatMigrationElementsAsJsonToDisplayOnLog(String objectName, Object object, Object from, Object to){
         return String.format("{%s: \"%s\", from: \"%s\", to:\"%s\"}", objectName, object, from, to);
     }
@@ -1997,10 +2015,9 @@ public class StorageSystemDataMotionStrategy implements DataMotionStrategy {
      * Return backing file for volume (if any), only for KVM volumes
      */
     private String getVolumeBackingFile(VolumeInfo srcVolumeInfo) {
-        if (srcVolumeInfo.getHypervisorType() == HypervisorType.KVM &&
-                srcVolumeInfo.getTemplateId() != null && srcVolumeInfo.getPoolId() != null) {
+        if (srcVolumeInfo.getHypervisorType() == HypervisorType.KVM && srcVolumeInfo.getTemplateId() != null && srcVolumeInfo.getPoolId() != null) {
             VMTemplateVO template = _vmTemplateDao.findById(srcVolumeInfo.getTemplateId());
-            if (template.getFormat() != null && template.getFormat() != Storage.ImageFormat.ISO) {
+            if (template != null && template.getFormat() != null && template.getFormat() != Storage.ImageFormat.ISO) {
                 VMTemplateStoragePoolVO ref = templatePoolDao.findByPoolTemplate(srcVolumeInfo.getPoolId(), srcVolumeInfo.getTemplateId(), null);
                 return ref != null ? ref.getInstallPath() : null;
             }
