@@ -114,7 +114,7 @@
                           <div v-if="template.deployasis">  {{ this.$t('message.deployasis') }} </div>
                         </span>
                         <disk-size-selection
-                          v-show="showRootDiskSizeChanger"
+                          v-if="showRootDiskSizeChanger"
                           input-decorator="rootdisksize"
                           :preFillContent="dataPreFill"
                           :isCustomized="true"
@@ -1065,7 +1065,9 @@ export default {
         this.vm.hostname = host.name
       }
 
-      if (this.diskSize) {
+      if (this.serviceOffering?.rootdisksize) {
+        this.vm.disksizetotalgb = this.serviceOffering.rootdisksize
+      } else if (this.diskSize) {
         this.vm.disksizetotalgb = this.diskSize
       }
 
@@ -1458,7 +1460,7 @@ export default {
         }
         if (this.showRootDiskSizeChanger && values.rootdisksize && values.rootdisksize > 0) {
           deployVmData.rootdisksize = values.rootdisksize
-        } else if (this.rootDiskSizeFixed > 0) {
+        } else if (this.rootDiskSizeFixed > 0 && !this.template.deployasis) {
           deployVmData.rootdisksize = this.rootDiskSizeFixed
         }
         if (values.hypervisor && values.hypervisor.length > 0) {
@@ -1988,6 +1990,7 @@ export default {
       this.updateComputeOffering(null)
     },
     updateTemplateConfigurationOfferingDetails (offeringId) {
+      this.rootDiskSizeFixed = 0
       var offering = this.serviceOffering
       if (!offering || offering.id !== offeringId) {
         offering = _.find(this.options.serviceOfferings, (option) => option.id === offeringId)
