@@ -50,6 +50,8 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 
+import com.cloud.api.query.dao.StoragePoolJoinDao;
+import com.cloud.api.query.vo.StoragePoolJoinVO;
 import org.apache.cloudstack.acl.ControlledEntity;
 import org.apache.cloudstack.acl.ControlledEntity.ACLType;
 import org.apache.cloudstack.acl.SecurityChecker.AccessType;
@@ -106,6 +108,8 @@ import org.apache.cloudstack.query.QueryService;
 import org.apache.cloudstack.storage.command.DeleteCommand;
 import org.apache.cloudstack.storage.command.DettachCommand;
 import org.apache.cloudstack.storage.datastore.db.PrimaryDataStoreDao;
+import org.apache.cloudstack.storage.datastore.db.StoragePoolDetailVO;
+import org.apache.cloudstack.storage.datastore.db.StoragePoolDetailsDao;
 import org.apache.cloudstack.storage.datastore.db.StoragePoolVO;
 import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreDao;
 import org.apache.cloudstack.storage.datastore.db.TemplateDataStoreVO;
@@ -351,6 +355,7 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     private static final int ACQUIRE_GLOBAL_LOCK_TIMEOUT_FOR_COOPERATION = 3;
 
     private static final long GiB_TO_BYTES = 1024 * 1024 * 1024;
+    private static final long GB_TO_MB = 1024 * 1024;
 
     @Inject
     private EntityManager _entityMgr;
@@ -412,6 +417,10 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
     private ClusterDao _clusterDao;
     @Inject
     private PrimaryDataStoreDao _storagePoolDao;
+    @Inject
+    private StoragePoolDetailsDao storagePoolDetailsDao;
+    @Inject
+    private StoragePoolJoinDao storagePoolJoinDao;
     @Inject
     private SecurityGroupManager _securityGroupMgr;
     @Inject
@@ -1209,6 +1218,16 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
         for (final VolumeVO rootVolumeOfVm : vols) {
             DiskOfferingVO currentRootDiskOffering = _diskOfferingDao.findById(rootVolumeOfVm.getDiskOfferingId());
 
+
+            Host host = _hostDao.findById(vmInstance.getHostId());
+            StoragePool storagePool = _storagePoolDao.findById(rootVolumeOfVm.getPoolId());
+
+            if (!isPoolAbleToScaleVolumeSize(vmInstance, host, storagePool, currentServiceOffering, newServiceOffering)) {
+                throw new CloudRuntimeException(
+                        String.format("Unable to scale %s due to no space available on local Storage Pool [uuid: %s, name: %s]. Please migrate Root volume [name: %s, uuid: %s] to a suitable pool.",
+                                vmInstance, storagePool.getUuid(), storagePool.getName(), rootVolumeOfVm.getName(), rootVolumeOfVm.getUuid()));
+            }
+
             ResizeVolumeCmd resizeVolumeCmd = prepareResizeVolumeCmd(rootVolumeOfVm, currentRootDiskOffering, newRootDiskOffering);
 
             if (rootVolumeOfVm.getDiskOfferingId() != newRootDiskOffering.getId()) {
@@ -1918,6 +1937,10 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
                 throw new CloudRuntimeException("Unable to scale vm: " + vmInstance.getUuid() + " due to insufficient resources");
             }
 
+            if (isVMUsingLocalStorage(vmInstance)) {
+                checkIfCanScaleRunningVmWithRootInLocalStorage(vmInstance, newServiceOffering, currentServiceOffering, newCpu, newSpeed, memoryDiff, cpuDiff, host);
+            }
+
             while (retry-- != 0) { // It's != so that it can match -1.
                 try {
                     boolean existingHostHasCapacity = false;
@@ -1967,8 +1990,74 @@ public class UserVmManagerImpl extends ManagerBase implements UserVmManager, Vir
                     }
                 }
             }
+        } else if (isVMUsingLocalStorage(vmInstance)) {
+            throwExceptionIfPoolCannotAllocateNewVolumeSize(vmInstance, newServiceOffering, currentServiceOffering);
         }
         return success;
+    }
+
+    private void checkIfCanScaleRunningVmWithRootInLocalStorage(VMInstanceVO vmInstance, ServiceOfferingVO newServiceOffering, ServiceOfferingVO currentServiceOffering, int newCpu,
+            int newSpeed, int memoryDiff, int cpuDiff, HostVO host) {
+        if (!isHostWithCapacityToScaleVmToNewOffering(vmInstance.getHostId(), newCpu, newSpeed, memoryDiff, cpuDiff, host)) {
+            throw new CloudRuntimeException(
+                    String.format("Unable to scale %s. Instance is running on local storage but %s does not have capacity to scale. Please, migrate VM to a suitable Hypervisor.",
+                            vmInstance, host));
+        }
+        throwExceptionIfPoolCannotAllocateNewVolumeSize(vmInstance, newServiceOffering, currentServiceOffering);
+    }
+
+    private void throwExceptionIfPoolCannotAllocateNewVolumeSize(VMInstanceVO vmInstance, ServiceOfferingVO newServiceOffering, ServiceOfferingVO currentServiceOffering) {
+        Host host = _hostDao.findById(vmInstance.getHostId();
+        StoragePool storagePool = storageMgr.findLocalStorageOnHost(host.getId());
+        if (!isPoolAbleToScaleVolumeSize(vmInstance, storagePool, currentServiceOffering, newServiceOffering)) {
+            throw new CloudRuntimeException(
+                    String.format("Unable to scale %s due to no space available on local Storage Pool [uuid: %, name: %]. Please migrate Root volume to a suitable pool.",
+                            vmInstance, storagePool.getUuid(), storagePool.getName()));
+        }
+    }
+
+    private boolean isPoolAbleToScaleVolumeSize(VMInstanceVO vmInstance, StoragePool storagePool, ServiceOffering currentServiceOffering,
+            ServiceOffering newServiceOffering) {
+        VolumeVO rootVolume = _volsDao.findReadyRootVolumesByInstance(vmInstance.getId()).get(0);
+        long currentSize = currentServiceOffering.getDiskSize();
+        DiskOffering newDiskOffering = _diskOfferingDao.findById(newServiceOffering.getId());
+        long newSize = newDiskOffering.getDiskSize();
+        if (newSize > currentSize) {
+            try {
+                _resourceLimitMgr.checkResourceLimit(_accountMgr.getAccount(rootVolume.getAccountId()), ResourceType.primary_storage, rootVolume.isDisplayVolume(), new Long(newSize - currentSize).longValue());
+            } catch (ResourceAllocationException e) {
+                s_logger.warn("Unable to resize Volume % on Pool %s.", e);
+                return false;
+            }
+            return isPoolWithEnoughCapacity(storagePool, currentSize, newSize);
+        }
+        return true;
+    }
+
+    private boolean isPoolWithEnoughCapacity(StoragePool localStoragePool, long currentSize, long newSize) {
+        double poolOverprovision = Double.valueOf(CapacityManager.StorageOverprovisioningFactor.value());
+        StoragePoolJoinVO localStoragePoolView = storagePoolJoinDao.findById(localStoragePool.getId());
+        StoragePoolDetailVO poolDetail = storagePoolDetailsDao.findDetail(localStoragePool.getId(), "storage.overprovisioning.factor");
+        if (poolDetail != null && StringUtils.isNotBlank(poolDetail.getValue())) {
+            poolOverprovision = Double.valueOf(poolDetail.getValue());
+        }
+
+        long storageCapacityBytes = localStoragePoolView.getCapacityBytes();
+        long poolSizeInBytesWithOverprovision = (long)(storageCapacityBytes * poolOverprovision);
+        long poolAllocatedBytes = localStoragePoolView.getUsedCapacity();
+        long remainingCapacityOnStorage = poolSizeInBytesWithOverprovision - poolAllocatedBytes;
+        long diskSizeDiff = newSize - currentSize;
+
+        return remainingCapacityOnStorage > diskSizeDiff;
+    }
+
+    private boolean isHostWithCapacityToScaleVmToNewOffering(long hostId, int newCpu, int newSpeed, int memoryDiffInGB, int cpuDiff, HostVO host) {
+        float cpuOverprovision = _capacityMgr.getClusterOverProvisioningFactor(host.getClusterId(), Capacity.CAPACITY_TYPE_CPU);
+        float memoryOverprovision = _capacityMgr.getClusterOverProvisioningFactor(host.getClusterId(), Capacity.CAPACITY_TYPE_MEMORY);
+        boolean isHostWithSuitableCapacity = _capacityMgr.checkIfHostHasCapacity(
+                hostId, cpuDiff, memoryDiffInGB * GB_TO_MB, false, cpuOverprovision, memoryOverprovision, false);
+        boolean isHostWithSuitableCpuCpuapability = _capacityMgr.checkIfHostHasCpuCapability(hostId, newCpu, newSpeed);
+        return isHostWithSuitableCpuCpuapability && isHostWithSuitableCapacity;
     }
 
     @Override
