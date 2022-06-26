@@ -283,8 +283,8 @@ public class StatsCollector extends ManagerBase implements ComponentMethodInterc
     @Inject
     private ImageStoreDetailsUtil imageStoreDetailsUtil;
 
-    private ConcurrentHashMap<Long, HostStats> _hostStats = new ConcurrentHashMap<Long, HostStats>();
     private final ConcurrentHashMap<Long, VmStats> _VmStats = new ConcurrentHashMap<Long, VmStats>();
+    private ConcurrentHashMap<Long, HostStats> _hostStats = new ConcurrentHashMap<Long, HostStats>();
     private final Map<String, VolumeStats> _volumeStats = new ConcurrentHashMap<String, VolumeStats>();
     private ConcurrentHashMap<Long, StorageStats> _storageStats = new ConcurrentHashMap<Long, StorageStats>();
     private ConcurrentHashMap<Long, StorageStats> _storagePoolStats = new ConcurrentHashMap<Long, StorageStats>();
