@@ -38,6 +38,13 @@
                 :un-checked-children="$t('label.metrics')"
                 :checked="$store.getters.metrics"
                 @change="(checked, event) => { $store.dispatch('SetMetrics', checked) }"/>
+               <a-switch
+                 v-if="!projectView && hasProjectId"
+                 style="margin-left: 8px"
+                 :checked-children="$t('label.projects')"
+                 :un-checked-children="$t('label.projects')"
+                 :checked="$store.getters.listAllProjects"
+                 @change="(checked, event) => { $store.dispatch('SetListAllProjects', checked) }"/>
               <a-tooltip placement="right">
                 <template slot="title">
                   {{ $t('label.filterby') }}
@@ -399,6 +406,7 @@ export default {
       showAction: false,
       dataView: false,
       projectView: false,
+      hasProjectId: false,
       selectedFilter: '',
       filters: [],
       searchFilters: [],
@@ -469,6 +477,9 @@ export default {
       }
     },
     '$store.getters.metrics' (oldVal, newVal) {
+      this.fetchData()
+    },
+    '$store.getters.listAllProjects' (oldVal, newVal) {
       this.fetchData()
     }
   },
@@ -549,6 +560,10 @@ export default {
 
       this.projectView = Boolean(store.getters.project && store.getters.project.id)
 
+      this.hasProjectId = ['vm', 'vmgroup', 'ssh', 'affinitygroup', 'volume', 'snapshot',
+        'vmsnapshot', 'guestnetwork', 'vpc', 'securitygroups', 'publicip', 'vpncustomergateway',
+        'template', 'iso', 'event'].includes(this.$route.name)
+
       if ((this.$route && this.$route.params && this.$route.params.id) || this.$route.query.dataView) {
         this.dataView = true
         if (!refreshed) {
@@ -625,6 +640,10 @@ export default {
         } else if (this.$route.path.startsWith('/ldapsetting/')) {
           params.hostname = this.$route.params.id
         }
+      }
+
+      if (this.$store.getters.listAllProjects && !this.projectView) {
+        params.projectid = '-1'
       }
 
       params.page = this.page
